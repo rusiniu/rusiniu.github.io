@@ -46,8 +46,6 @@
         
         //
         async function build_table() {
-            //Получаем массив get
-            let get_vars = getURLVarArr();
             var method = 'ft-txns';
             f = {"query": "query { mb_views_nft_tokens( where: {nft_contract_id: {_eq: \"yuplandshop.mintbase1.near\"}} distinct_on: title ) { title description media }}"};
             nft_list = await call_mintbase(f);
