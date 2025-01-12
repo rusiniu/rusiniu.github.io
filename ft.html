@@ -58,7 +58,7 @@
             //Получаем массив get
             let get_vars = getURLVarArr();
             var method = 'ft-txns';
-            trx_list = await call_nearblocks(method, get_vars["wallet"]);
+            trx_list = await call_nearblocks(method, get_vars["wallet"].toLowerCase());
 
             const txTable = document.querySelector("#trxList tbody");
             txTable.innerHTML = '';
