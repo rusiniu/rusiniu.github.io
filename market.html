@@ -1,0 +1,497 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Аналитика рынка Caps Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <style>
+        body { font-family: Arial, sans-serif; margin: 20px; background: #f0f2f5; }
+        .container { max-width: 1200px; margin: 0 auto; }
+        .filters { margin: 20px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .filters select, .filters input, .filters button { margin: 0 10px 10px 0; padding: 8px 12px; border: 1px solid #ddd; border-radius: 5px; }
+        .filters button { background: #007bff; color: white; border: none; cursor: pointer; }
+        .filters button:hover { background: #0056b3; }
+        .filters button:disabled { background: #6c757d; cursor: not-allowed; }
+        .stats { margin: 20px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .item-list { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: white; border-radius: 5px; }
+        .item { padding: 8px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
+        .item:hover { background: #f8f9fa; }
+        .chart-container { margin: 20px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
+        .loading { color: #666; font-style: italic; text-align: center; padding: 20px; }
+        .error { color: #dc3545; background: #f8d7da; padding: 10px; border-radius: 5px; }
+        .success { color: #155724; background: #d4edda; padding: 10px; border-radius: 5px; }
+        .collection-info { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+        .status-badge { padding: 2px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; }
+        .status-available { background: #d4edda; color: #155724; }
+        .status-sold-out { background: #f8d7da; color: #721c24; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>📊 Аналитика рынка Caps Game</h1>
+        
+        <div class="filters">
+            <h3>Фильтры:</h3>
+            <div class="collection-info">
+                <select id="collectionSelect">
+                    <option value="">Загрузка коллекций...</option>
+                </select>
+                <span id="collectionStats" class="loading"></span>
+            </div>
+            
+            <select id="qualitySelect">
+                <option value="">Все качества</option>
+                <option value="COMMON">COMMON</option>
+                <option value="COMMON_PLUS">COMMON_PLUS</option>
+                <option value="RARE">RARE</option>
+				<option value="RARE_PLUS">RARE_PLUS</option>
+                <option value="EPIC">EPIC</option>
+				<option value="EPIC">EPIC_PLUS</option>
+                <option value="LEGEND">LEGEND</option>
+				<option value="LEGEND_PLUS">LEGEND_PLUS</option>
+                <option value="DIAMOND">DIAMOND</option>
+            </select>
+            
+            <input type="number" id="limitInput" placeholder="Лимит" value="100" min="1" max="1000">
+            <button onclick="loadMarketData()" id="loadBtn">Загрузить данные</button>
+            <button onclick="startAutoRefresh()" id="autoRefreshBtn">Автообновление (30 сек)</button>
+            <button onclick="stopAutoRefresh()" id="stopBtn">Остановить</button>
+        </div>
+
+        <div class="stats" id="stats">
+            <div class="loading">Загрузите данные для отображения статистики</div>
+        </div>
+
+        <div class="chart-container">
+            <canvas id="priceChart" width="400" height="200"></canvas>
+        </div>
+
+        <div>
+            <h3>Список предметов:</h3>
+            <div class="item-list" id="itemList">
+                <div class="loading">Загрузите данные для отображения списка</div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Конфигурация
+        const FIRESTORE_URL = "https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents:runQuery";
+        const COLLECTIONS_URL = "https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents/Static/CapsCollections";
+        
+        let autoRefreshInterval = null;
+        let currentChart = null;
+        let collections = [];
+
+		// Безопасное получение значения из Firestore fields
+        function getFieldValue(fields, fieldName, defaultValue = null) {
+            if (!fields || !fields[fieldName]) {
+                return defaultValue;
+            }
+            
+            const field = fields[fieldName];
+            if (field.stringValue !== undefined) return field.stringValue;
+            if (field.integerValue !== undefined) return parseInt(field.integerValue);
+            if (field.doubleValue !== undefined) return parseFloat(field.doubleValue);
+            if (field.booleanValue !== undefined) return field.booleanValue;
+            
+            return defaultValue;
+        }
+
+        // Динамическая загрузка коллекций
+        async function loadCollections() {
+            try {
+                showMessage('collectionSelect', 'Загрузка коллекций...', 'loading');
+                document.getElementById('collectionStats').textContent = '';
+                
+                const response = await fetch(COLLECTIONS_URL);
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const data = await response.json();
+                collections = parseCollectionsResponse(data);
+                
+                populateCollectionSelect(collections);
+                console.log('Загружено коллекций:', collections.length);
+                
+            } catch (error) {
+                console.error('Ошибка загрузки коллекций:', error);
+                showMessage('collectionSelect', 'Ошибка загрузки коллекций', 'error');
+            }
+        }
+
+        // Парсинг ответа с коллекциями (на основе вашей структуры)
+         function parseCollectionsResponse(response) {
+            if (!response.fields || !response.fields.collections || !response.fields.collections.arrayValue) {
+                console.error('Неожиданная структура ответа:', response);
+                return [];
+            }
+
+            return response.fields.collections.arrayValue.values
+                .map(item => {
+                    try {
+                        const fields = item.mapValue.fields;
+                        return {
+                            id: getFieldValue(fields, 'id', 'unknown'),
+                            title: getFieldValue(fields, 'title', 'Unknown Collection'),
+                            status: getFieldValue(fields, 'status', 'unknown'),
+                            supply: getFieldValue(fields, 'supply', 0),
+                            used: getFieldValue(fields, 'used', 0),
+                            burned: getFieldValue(fields, 'burned', 0),
+                            size: getFieldValue(fields, 'size', 0),
+                            isStandard: getFieldValue(fields, 'isStandard', false),
+                            isCommunity: getFieldValue(fields, 'isCommunity', false),
+                            hasCustomDiamond: getFieldValue(fields, 'hasCustomDiamond', false),
+                            order: getFieldValue(fields, 'order', 0)
+                        };
+                    } catch (error) {
+                        console.warn('Ошибка парсинга коллекции:', error, item);
+                        return null;
+                    }
+                })
+                .filter(collection => collection !== null && collection.id !== 'unknown')
+                .sort((a, b) => {
+                    // Сортируем по порядку, доступные первыми
+                    if (a.status === 'available' && b.status !== 'available') return -1;
+                    if (a.status !== 'available' && b.status === 'available') return 1;
+                    return (a.order || 0) - (b.order || 0);
+                });
+        }
+
+        // Заполнение селектора коллекций
+        function populateCollectionSelect(collections) {
+            const select = document.getElementById('collectionSelect');
+            select.innerHTML = '<option value="">Все коллекции</option>';
+            
+            collections.forEach(collection => {
+                const option = document.createElement('option');
+                option.value = collection.id;
+                option.textContent = `${collection.title} (${collection.status === 'available' ? '✅' : '❌'} ${collection.size}шт)`;
+                option.title = `Supply: ${collection.supply.toLocaleString()} | Used: ${collection.used.toLocaleString()} | Burned: ${collection.burned.toLocaleString()}`;
+                select.appendChild(option);
+            });
+
+            // Обновляем информацию о выбранной коллекции
+            select.addEventListener('change', updateCollectionInfo);
+        }
+
+        // Обновление информации о коллекции
+        function updateCollectionInfo() {
+            const selectedId = document.getElementById('collectionSelect').value;
+            const collection = collections.find(c => c.id === selectedId);
+            const statsElement = document.getElementById('collectionStats');
+            
+            if (collection) {
+                const availablePercent = ((collection.supply - collection.used) / collection.supply * 100).toFixed(1);
+                const burnedPercent = (collection.burned / collection.supply * 100).toFixed(1);
+                
+                statsElement.innerHTML = `
+                    <span class="status-badge ${collection.status === 'available' ? 'status-available' : 'status-sold-out'}">
+                        ${collection.status === 'available' ? 'ДОСТУПНА' : 'ПРОДАНА'}
+                    </span>
+                    Supply: ${collection.supply.toLocaleString()} | 
+                    Available: ${(collection.supply - collection.used).toLocaleString()} (${availablePercent}%) |
+                    Burned: ${collection.burned.toLocaleString()} (${burnedPercent}%) |
+                    Size: ${collection.size}
+                `;
+            } else {
+                statsElement.textContent = 'Выберите коллекцию для детальной информации';
+            }
+        }
+
+        // Основная функция загрузки данных
+        async function loadMarketData() {
+            const collection = document.getElementById('collectionSelect').value;
+            const quality = document.getElementById('qualitySelect').value;
+            const limit = parseInt(document.getElementById('limitInput').value) || 100;
+
+            // Блокируем кнопку на время загрузки
+            const loadBtn = document.getElementById('loadBtn');
+            loadBtn.disabled = true;
+            loadBtn.textContent = 'Загрузка...';
+            
+            showLoading();
+            
+            try {
+                const items = await fetchMarketData(collection, quality, limit);
+                displayStats(items);
+                displayItems(items);
+                updateChart(items);
+                
+                document.getElementById('stats').classList.remove('error');
+                document.getElementById('stats').classList.add('success');
+                
+            } catch (error) {
+                console.error('Ошибка загрузки:', error);
+                document.getElementById('stats').innerHTML = `<div class="error">Ошибка загрузки: ${error.message}</div>`;
+                document.getElementById('stats').classList.remove('success');
+                document.getElementById('stats').classList.add('error');
+            } finally {
+                loadBtn.disabled = false;
+                loadBtn.textContent = 'Загрузить данные';
+            }
+        }
+
+        // Запрос к Firestore API
+        async function fetchMarketData(collection, quality, limit) {
+            const whereFilters = [{
+                "fieldFilter": {
+                    "field": {"fieldPath": "status"},
+                    "op": "EQUAL",
+                    "value": {"stringValue": "SALE"}
+                }
+            }];
+
+            // Добавляем фильтры, если выбраны
+            if (collection) {
+                whereFilters.push({
+                    "fieldFilter": {
+                        "field": {"fieldPath": "collectionId"},
+                        "op": "EQUAL", 
+                        "value": {"stringValue": collection}
+                    }
+                });
+            }
+
+            if (quality) {
+                whereFilters.push({
+                    "fieldFilter": {
+                        "field": {"fieldPath": "grade"},
+                        "op": "EQUAL",
+                        "value": {"stringValue": quality}
+                    }
+                });
+            }
+
+            const where = whereFilters.length === 1 ? 
+                whereFilters[0] : 
+                {
+                    "compositeFilter": {
+                        "op": "AND",
+                        "filters": whereFilters
+                    }
+                };
+
+            // Используем конкретную коллекцию или первую доступную
+            const targetCollection = collection || (collections.length > 0 ? collections[0].id : "Caps");
+
+            const query = {
+                "structuredQuery": {
+                    "from": [{"collectionId": "Caps"}],
+                    "where": where,
+                    "orderBy": [
+                        {
+                            "field": {"fieldPath": "price"},
+                            "direction": "ASCENDING"
+                        }
+                    ],
+                    "limit": limit
+                }
+            };
+
+            const response = await fetch(FIRESTORE_URL, {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify(query)
+            });
+
+            if (!response.ok) {
+                throw new Error(`HTTP error! status: ${response.status}`);
+            }
+
+            const data = await response.json();
+            return parseFirestoreResponse(data);
+        }
+
+        // Парсинг ответа Firestore
+        function parseFirestoreResponse(response) {
+            return response
+                .filter(item => item.document)
+                .map(item => {
+                    const fields = item.document.fields;
+                    return {
+                        id: item.document.name.split('/').pop(),
+                        collection: fields.collection?.stringValue || 'Unknown',
+                        quality: fields.grade?.stringValue || 'UNKNOWN', 
+                        price: fields.price?.integerValue / 1000000000 || 0,
+                        itemId: fields.number?.integerValue || 'Unknown',
+                        timestamp: new Date().toLocaleString()
+                    };
+                });
+        }
+
+        // Отображение статистики
+        function displayStats(items) {
+            if (items.length === 0) {
+                document.getElementById('stats').innerHTML = '<div>Нет данных для отображения</div>';
+                return;
+            }
+
+            const prices = items.map(item => item.price);
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const avgPrice = (prices.reduce((a, b) => a + b, 0) / prices.length).toFixed(2);
+            const totalValue = prices.reduce((a, b) => a + b, 0);
+
+            // Находим медиану
+            const sortedPrices = [...prices].sort((a, b) => a - b);
+            const medianPrice = sortedPrices.length % 2 === 0 
+                ? (sortedPrices[sortedPrices.length/2 - 1] + sortedPrices[sortedPrices.length/2]) / 2
+                : sortedPrices[Math.floor(sortedPrices.length/2)];
+
+            document.getElementById('stats').innerHTML = `
+                <h3>📈 Статистика рынка:</h3>
+                <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
+                    <div><strong>Найдено предметов:</strong> ${items.length}</div>
+                    <div><strong>Минимальная цена:</strong> ${minPrice}</div>
+                    <div><strong>Максимальная цена:</strong> ${maxPrice}</div>
+                    <div><strong>Средняя цена:</strong> ${avgPrice}</div>
+                    <div><strong>Медианная цена:</strong> ${medianPrice.toFixed(2)}</div>
+                    <div><strong>Общая стоимость:</strong> ${totalValue.toLocaleString()}</div>
+                </div>
+                <div style="margin-top: 10px; font-size: 14px; color: #666;">
+                    Диапазон цен: <strong>${minPrice} - ${maxPrice}</strong> | 
+                    Разброс: <strong>${(maxPrice - minPrice).toLocaleString()}</strong>
+                </div>
+            `;
+        }
+
+        // Отображение списка предметов
+        function displayItems(items) {
+            const container = document.getElementById('itemList');
+            
+            if (items.length === 0) {
+                container.innerHTML = '<div class="loading">Предметы не найдены</div>';
+                return;
+            }
+
+            container.innerHTML = items.map(item => `
+                <div class="item">
+                    <div>
+                        <strong>${item.collection}</strong> | 
+                        <span style="color: #6c757d;">${item.quality}</span> | 
+                        ID: ${item.itemId}
+                    </div>
+                    <div style="font-weight: bold; color: #28a745;">
+                        ${item.price.toLocaleString()}
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        // Обновление графика
+        function updateChart(items) {
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            
+            // Удаляем предыдущий график
+            if (currentChart) {
+                currentChart.destroy();
+            }
+
+            if (items.length === 0) {
+                ctx.clearRect(0, 0, ctx.canvas.width, ctx.canvas.height);
+                return;
+            }
+
+            // Группируем по цене для гистограммы
+            const priceGroups = {};
+            items.forEach(item => {
+                priceGroups[item.price] = (priceGroups[item.price] || 0) + 1;
+            });
+
+            const prices = Object.keys(priceGroups).map(Number).sort((a, b) => a - b);
+            const counts = prices.map(price => priceGroups[price]);
+
+            currentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: prices.map(p => p.toLocaleString()),
+                    datasets: [{
+                        label: 'Количество предметов по ценам',
+                        data: counts,
+                        backgroundColor: 'rgba(54, 162, 235, 0.7)',
+                        borderColor: 'rgba(54, 162, 235, 1)',
+                        borderWidth: 1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    plugins: {
+                        title: {
+                            display: true,
+                            text: 'Распределение цен на рынке'
+                        },
+                        tooltip: {
+                            callbacks: {
+                                label: function(context) {
+                                    return `Цена: ${context.label} | Количество: ${context.raw}`;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        y: {
+                            beginAtZero: true,
+                            title: {
+                                display: true,
+                                text: 'Количество предметов'
+                            }
+                        },
+                        x: {
+                            title: {
+                                display: true,
+                                text: 'Цена'
+                            },
+                            ticks: {
+                                maxTicksLimit: 20
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // Вспомогательные функции
+        function showMessage(elementId, message, type = 'loading') {
+            const element = document.getElementById(elementId);
+            element.innerHTML = `<option value="">${message}</option>`;
+        }
+
+        function showLoading() {
+            document.getElementById('stats').innerHTML = '<div class="loading">Загрузка данных...</div>';
+            document.getElementById('itemList').innerHTML = '<div class="loading">Загрузка данных...</div>';
+        }
+
+        // Функции автообновления
+        function startAutoRefresh() {
+            stopAutoRefresh();
+            autoRefreshInterval = setInterval(loadMarketData, 30000);
+            document.getElementById('autoRefreshBtn').textContent = 'Автообновление (активно)';
+            document.getElementById('autoRefreshBtn').style.background = '#28a745';
+            console.log('Автообновление запущено (30 сек)');
+        }
+
+        function stopAutoRefresh() {
+            if (autoRefreshInterval) {
+                clearInterval(autoRefreshInterval);
+                autoRefreshInterval = null;
+                document.getElementById('autoRefreshBtn').textContent = 'Автообновление (30 сек)';
+                document.getElementById('autoRefreshBtn').style.background = '#007bff';
+                console.log('Автообновление остановлено');
+            }
+        }
+
+        // Инициализация при загрузке страницы
+        document.addEventListener('DOMContentLoaded', function() {
+            loadCollections().then(() => {
+                // Автоматически загружаем данные после загрузки коллекций
+                setTimeout(loadMarketData, 1000);
+            });
+        });
+    </script>
+</body>
+</html>
