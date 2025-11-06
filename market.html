@@ -13,10 +13,18 @@
         .filters button { background: #007bff; color: white; border: none; cursor: pointer; }
         .filters button:hover { background: #0056b3; }
         .filters button:disabled { background: #6c757d; cursor: not-allowed; }
+        .sort-option { display: flex; align-items: center; margin: 10px 0; }
+        .sort-option input { margin-right: 8px; }
         .stats { margin: 20px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .item-list { max-height: 400px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: white; border-radius: 5px; }
-        .item { padding: 8px; border-bottom: 1px solid #eee; display: flex; justify-content: space-between; }
+        .item-list { max-height: 600px; overflow-y: auto; border: 1px solid #ddd; padding: 10px; background: white; border-radius: 5px; }
+        .item { padding: 12px; border-bottom: 1px solid #eee; display: flex; align-items: center; gap: 15px; }
         .item:hover { background: #f8f9fa; }
+        .item-image { width: 50px; height: 50px; object-fit: contain; border-radius: 5px; border: 1px solid #ddd; }
+        .item-info { flex: 1; }
+        .item-price { font-weight: bold; color: #28a745; font-size: 16px; min-width: 100px; text-align: right; }
+        .item-collection { font-weight: bold; color: #333; }
+        .item-quality { color: #6c757d; font-size: 14px; }
+        .item-id { color: #999; font-size: 12px; }
         .chart-container { margin: 20px 0; padding: 20px; background: white; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
         .loading { color: #666; font-style: italic; text-align: center; padding: 20px; }
         .error { color: #dc3545; background: #f8d7da; padding: 10px; border-radius: 5px; }
@@ -45,18 +53,22 @@
                 <option value="COMMON">COMMON</option>
                 <option value="COMMON_PLUS">COMMON_PLUS</option>
                 <option value="RARE">RARE</option>
-				<option value="RARE_PLUS">RARE_PLUS</option>
+                <option value="RARE_PLUS">RARE_PLUS</option>
                 <option value="EPIC">EPIC</option>
-				<option value="EPIC">EPIC_PLUS</option>
+                <option value="EPIC_PLUS">EPIC_PLUS</option>
                 <option value="LEGEND">LEGEND</option>
-				<option value="LEGEND_PLUS">LEGEND_PLUS</option>
+                <option value="LEGEND_PLUS">LEGEND_PLUS</option>
                 <option value="DIAMOND">DIAMOND</option>
             </select>
             
             <input type="number" id="limitInput" placeholder="Лимит" value="100" min="1" max="1000">
+            
+            <div class="sort-option">
+                <input type="checkbox" id="sortByNumber" onchange="loadMarketData()">
+                <label for="sortByNumber">Сортировать по номеру (вместо цены)</label>
+            </div>
+            
             <button onclick="loadMarketData()" id="loadBtn">Загрузить данные</button>
-            <button onclick="startAutoRefresh()" id="autoRefreshBtn">Автообновление (30 сек)</button>
-            <button onclick="stopAutoRefresh()" id="stopBtn">Остановить</button>
         </div>
 
         <div class="stats" id="stats">
@@ -79,12 +91,12 @@
         // Конфигурация
         const FIRESTORE_URL = "https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents:runQuery";
         const COLLECTIONS_URL = "https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents/Static/CapsCollections";
+        const STORAGE_BASE_URL = "https://firebasestorage.googleapis.com/v0/b/capsgame-prod.appspot.com/o/";
         
-        let autoRefreshInterval = null;
         let currentChart = null;
         let collections = [];
 
-		// Безопасное получение значения из Firestore fields
+        // Безопасное получение значения из Firestore fields
         function getFieldValue(fields, fieldName, defaultValue = null) {
             if (!fields || !fields[fieldName]) {
                 return defaultValue;
@@ -123,7 +135,7 @@
         }
 
         // Парсинг ответа с коллекциями (на основе вашей структуры)
-         function parseCollectionsResponse(response) {
+        function parseCollectionsResponse(response) {
             if (!response.fields || !response.fields.collections || !response.fields.collections.arrayValue) {
                 console.error('Неожиданная структура ответа:', response);
                 return [];
@@ -184,8 +196,8 @@
             const statsElement = document.getElementById('collectionStats');
             
             if (collection) {
-                const availablePercent = ((collection.supply - collection.used) / collection.supply * 100).toFixed(1);
-                const burnedPercent = (collection.burned / collection.supply * 100).toFixed(1);
+                const availablePercent = collection.supply > 0 ? ((collection.supply - collection.used) / collection.supply * 100).toFixed(1) : 0;
+                const burnedPercent = collection.supply > 0 ? (collection.burned / collection.supply * 100).toFixed(1) : 0;
                 
                 statsElement.innerHTML = `
                     <span class="status-badge ${collection.status === 'available' ? 'status-available' : 'status-sold-out'}">
@@ -206,6 +218,7 @@
             const collection = document.getElementById('collectionSelect').value;
             const quality = document.getElementById('qualitySelect').value;
             const limit = parseInt(document.getElementById('limitInput').value) || 100;
+            const sortByNumber = document.getElementById('sortByNumber').checked;
 
             // Блокируем кнопку на время загрузки
             const loadBtn = document.getElementById('loadBtn');
@@ -215,7 +228,7 @@
             showLoading();
             
             try {
-                const items = await fetchMarketData(collection, quality, limit);
+                const items = await fetchMarketData(collection, quality, limit, sortByNumber);
                 displayStats(items);
                 displayItems(items);
                 updateChart(items);
@@ -235,7 +248,7 @@
         }
 
         // Запрос к Firestore API
-        async function fetchMarketData(collection, quality, limit) {
+        async function fetchMarketData(collection, quality, limit, sortByNumber) {
             const whereFilters = [{
                 "fieldFilter": {
                     "field": {"fieldPath": "status"},
@@ -274,19 +287,22 @@
                     }
                 };
 
-            // Используем конкретную коллекцию или первую доступную
-            const targetCollection = collection || (collections.length > 0 ? collections[0].id : "Caps");
+            // Определяем сортировку
+            const orderBy = sortByNumber ? 
+                [{
+                    "field": {"fieldPath": "number"},
+                    "direction": "ASCENDING"
+                }] :
+                [{
+                    "field": {"fieldPath": "price"},
+                    "direction": "ASCENDING"
+                }];
 
             const query = {
                 "structuredQuery": {
                     "from": [{"collectionId": "Caps"}],
                     "where": where,
-                    "orderBy": [
-                        {
-                            "field": {"fieldPath": "price"},
-                            "direction": "ASCENDING"
-                        }
-                    ],
+                    "orderBy": orderBy,
                     "limit": limit
                 }
             };
@@ -313,12 +329,16 @@
                 .filter(item => item.document)
                 .map(item => {
                     const fields = item.document.fields;
+                    const imageUrl = getFieldValue(fields, 'url');
+                    const fullImageUrl = imageUrl ? `${STORAGE_BASE_URL}${encodeURIComponent(imageUrl)}?alt=media` : null;
+                    
                     return {
                         id: item.document.name.split('/').pop(),
-                        collection: fields.collection?.stringValue || 'Unknown',
-                        quality: fields.grade?.stringValue || 'UNKNOWN', 
-                        price: fields.price?.integerValue / 1000000000 || 0,
-                        itemId: fields.number?.integerValue || 'Unknown',
+                        collection: getFieldValue(fields, 'collection', 'Unknown'),
+                        quality: getFieldValue(fields, 'grade', 'UNKNOWN'), 
+                        price: getFieldValue(fields, 'price', 0) / 1000000000,
+                        itemId: getFieldValue(fields, 'number', 'Unknown'),
+                        imageUrl: fullImageUrl,
                         timestamp: new Date().toLocaleString()
                     };
                 });
@@ -347,15 +367,15 @@
                 <h3>📈 Статистика рынка:</h3>
                 <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 15px;">
                     <div><strong>Найдено предметов:</strong> ${items.length}</div>
-                    <div><strong>Минимальная цена:</strong> ${minPrice}</div>
-                    <div><strong>Максимальная цена:</strong> ${maxPrice}</div>
+                    <div><strong>Минимальная цена:</strong> ${minPrice.toFixed(2)}</div>
+                    <div><strong>Максимальная цена:</strong> ${maxPrice.toFixed(2)}</div>
                     <div><strong>Средняя цена:</strong> ${avgPrice}</div>
                     <div><strong>Медианная цена:</strong> ${medianPrice.toFixed(2)}</div>
-                    <div><strong>Общая стоимость:</strong> ${totalValue.toLocaleString()}</div>
+                    <div><strong>Общая стоимость:</strong> ${totalValue.toFixed(2)}</div>
                 </div>
                 <div style="margin-top: 10px; font-size: 14px; color: #666;">
-                    Диапазон цен: <strong>${minPrice} - ${maxPrice}</strong> | 
-                    Разброс: <strong>${(maxPrice - minPrice).toLocaleString()}</strong>
+                    Диапазон цен: <strong>${minPrice.toFixed(2)} - ${maxPrice.toFixed(2)}</strong> | 
+                    Разброс: <strong>${(maxPrice - minPrice).toFixed(2)}</strong>
                 </div>
             `;
         }
@@ -371,13 +391,17 @@
 
             container.innerHTML = items.map(item => `
                 <div class="item">
-                    <div>
-                        <strong>${item.collection}</strong> | 
-                        <span style="color: #6c757d;">${item.quality}</span> | 
-                        ID: ${item.itemId}
+                    ${item.imageUrl ? 
+                        `<img src="${item.imageUrl}" alt="${item.collection}" class="item-image" onerror="this.style.display='none'">` : 
+                        '<div class="item-image" style="background: #f0f0f0; display: flex; align-items: center; justify-content: center; color: #999;">No img</div>'
+                    }
+                    <div class="item-info">
+                        <div class="item-collection">${item.collection}</div>
+                        <div class="item-quality">Качество: ${item.quality}</div>
+                        <div class="item-id">ID: ${item.itemId}</div>
                     </div>
-                    <div style="font-weight: bold; color: #28a745;">
-                        ${item.price.toLocaleString()}
+                    <div class="item-price">
+                        ${item.price.toFixed(2)} TON
                     </div>
                 </div>
             `).join('');
@@ -409,7 +433,7 @@
             currentChart = new Chart(ctx, {
                 type: 'bar',
                 data: {
-                    labels: prices.map(p => p.toLocaleString()),
+                    labels: prices.map(p => p.toFixed(2)),
                     datasets: [{
                         label: 'Количество предметов по ценам',
                         data: counts,
@@ -428,7 +452,7 @@
                         tooltip: {
                             callbacks: {
                                 label: function(context) {
-                                    return `Цена: ${context.label} | Количество: ${context.raw}`;
+                                    return `Цена: ${context.label} TON | Количество: ${context.raw}`;
                                 }
                             }
                         }
@@ -444,7 +468,7 @@
                         x: {
                             title: {
                                 display: true,
-                                text: 'Цена'
+                                text: 'Цена (TON)'
                             },
                             ticks: {
                                 maxTicksLimit: 20
@@ -464,25 +488,6 @@
         function showLoading() {
             document.getElementById('stats').innerHTML = '<div class="loading">Загрузка данных...</div>';
             document.getElementById('itemList').innerHTML = '<div class="loading">Загрузка данных...</div>';
-        }
-
-        // Функции автообновления
-        function startAutoRefresh() {
-            stopAutoRefresh();
-            autoRefreshInterval = setInterval(loadMarketData, 30000);
-            document.getElementById('autoRefreshBtn').textContent = 'Автообновление (активно)';
-            document.getElementById('autoRefreshBtn').style.background = '#28a745';
-            console.log('Автообновление запущено (30 сек)');
-        }
-
-        function stopAutoRefresh() {
-            if (autoRefreshInterval) {
-                clearInterval(autoRefreshInterval);
-                autoRefreshInterval = null;
-                document.getElementById('autoRefreshBtn').textContent = 'Автообновление (30 сек)';
-                document.getElementById('autoRefreshBtn').style.background = '#007bff';
-                console.log('Автообновление остановлено');
-            }
         }
 
         // Инициализация при загрузке страницы
