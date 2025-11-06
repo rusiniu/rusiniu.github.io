@@ -1,0 +1,243 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Squad Users</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background-color: #f5f5f5;
+        }
+        .container {
+            max-width: 1400px;
+            margin: 0 auto;
+            background-color: white;
+            padding: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #333;
+            text-align: center;
+        }
+        .stats {
+            margin-bottom: 20px;
+            padding: 10px;
+            background-color: #e9ecef;
+            border-radius: 4px;
+            text-align: center;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-top: 20px;
+        }
+        th, td {
+            padding: 12px;
+            text-align: left;
+            border-bottom: 1px solid #ddd;
+        }
+        th {
+            background-color: #f8f9fa;
+            font-weight: bold;
+            color: #495057;
+        }
+        tr:hover {
+            background-color: #f8f9fa;
+        }
+        .loading {
+            text-align: center;
+            padding: 20px;
+            color: #666;
+        }
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 10px;
+        }
+        .currency {
+            font-weight: bold;
+        }
+        .gum { color: #28a745; }
+        .tokens { color: #ffc107; }
+        .burn { color: #dc3545; }
+        .burn-equivalent { color: #17a2b8; }
+        .total { color: #007bff; }
+        .refresh-btn {
+            background-color: #007bff;
+            color: white;
+            border: none;
+            padding: 10px 20px;
+            border-radius: 4px;
+            cursor: pointer;
+            margin-bottom: 20px;
+        }
+        .refresh-btn:hover {
+            background-color: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>👥 Squad Users</h1>
+        <button class="refresh-btn" onclick="getSquad()">🔄 Обновить данные</button>
+        <div class="stats" id="stats"></div>
+        <div id="loading" class="loading">Загрузка данных...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="table-container" style="display: none;">
+            <table id="users-table">
+                <thead>
+                    <tr>
+                        <th>ID</th>
+                        <th>Username</th>
+                        <th>Pseudonym</th>
+                        <th>💎 Gum</th>
+                        <th>🎫 Tokens</th>
+                        <th>🔥 Burn</th>
+                        <th>🔥→💎</th>
+                        <th>💰 Total</th>
+                    </tr>
+                </thead>
+                <tbody id="users-tbody">
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        async function getSquad() {
+            const url = "https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents/SquadsV2/-1002917473074:runQuery";
+            const collections = ['gum', 'tokens', 'burn'];
+            const users = {};
+            
+            // Показываем загрузку, скрываем ошибки и таблицу
+            document.getElementById('loading').style.display = 'block';
+            document.getElementById('error').style.display = 'none';
+            document.getElementById('table-container').style.display = 'none';
+            document.getElementById('stats').innerHTML = '';
+
+            try {
+                for (const collection of collections) {
+                    const query = {
+                        "structuredQuery": {
+                            "from": [{"collectionId": collection}],
+                            "where": null,
+                            "select": {
+                                "fields": [
+                                    {"fieldPath": "id"},
+                                    {"fieldPath": "username"},
+                                    {"fieldPath": "pseudonym"},
+                                    {"fieldPath": "pseudonym_lc"},
+                                    {"fieldPath": "amount"}
+                                ]
+                            },
+                            "orderBy": null,
+                            "limit": null
+                        }
+                    };
+
+                    const response = await fetch(url, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/json',
+                        },
+                        body: JSON.stringify(query)
+                    });
+
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+
+                    const data = await response.json();
+
+                    for (const userData of data) {
+                        if (!userData.document) continue;
+
+                        const doc = userData.document;
+                        const fields = doc.fields;
+
+                        const user_id = fields.id.integerValue;
+                        const amount = parseInt(fields.amount.integerValue);
+
+                        let username = "";
+                        let pseudonym = "";
+
+                        if (fields.username) {
+                            username = fields.username.stringValue;
+                        }
+                        if (fields.pseudonym) {
+                            pseudonym = fields.pseudonym.stringValue;
+                        }
+
+                        if (!users[user_id]) {
+                            users[user_id] = {
+                                id: user_id,
+                                username: username,
+                                pseudonym: pseudonym,
+                                gum: 0,
+                                tokens: 0,
+                                burn: 0
+                            };
+                        }
+
+                        users[user_id][collection] = amount;
+                    }
+                }
+
+                const usersList = Object.values(users);
+                
+                // Обновляем статистику
+                document.getElementById('stats').innerHTML = 
+                    `Найдено пользователей: <strong>${usersList.length}</strong>`;
+                
+                // Сортируем пользователей по новому правилу Total (gum + burn в gum)
+                usersList.sort((a, b) => {
+                    const totalA = a.gum + (a.burn * 40);
+                    const totalB = b.gum + (b.burn * 40);
+                    return totalB - totalA;
+                });
+
+                // Заполняем таблицу
+                const tbody = document.getElementById('users-tbody');
+                tbody.innerHTML = '';
+
+                usersList.forEach(user => {
+                    const burnEquivalent = user.burn * 40;
+                    const total = user.gum + burnEquivalent;
+                    
+                    const row = document.createElement('tr');
+                    
+                    row.innerHTML = `
+                        <td>${user.id}</td>
+                        <td>${user.username || '-'}</td>
+                        <td>${user.pseudonym || '-'}</td>
+                        <td class="currency gum">${user.gum.toLocaleString()}</td>
+                        <td class="currency tokens">${user.tokens.toLocaleString()}</td>
+                        <td class="currency burn">${user.burn.toLocaleString()}</td>
+                        <td class="currency burn-equivalent">${burnEquivalent.toLocaleString()}</td>
+                        <td class="currency total">${total.toLocaleString()}</td>
+                    `;
+                    
+                    tbody.appendChild(row);
+                });
+
+                // Показываем таблицу, скрываем загрузку
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('table-container').style.display = 'block';
+
+            } catch (error) {
+                console.error('Ошибка:', error);
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = 
+                    `Ошибка при загрузке данных: ${error.message}`;
+            }
+        }
+
+        // Загружаем данные при загрузке страницы
+        document.addEventListener('DOMContentLoaded', getSquad);
+    </script>
+</body>
+</html>
