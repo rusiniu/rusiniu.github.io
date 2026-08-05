@@ -1,0 +1,463 @@
+/* css/common.css - единые стили для всех инструментов Caps Game */
+
+:root {
+    --primary-dark: #0f212e;
+    --primary: #1a3a48;
+    --primary-light: #2c6e8f;
+    --accent: #fbbf24;
+    --accent-dark: #f59e0b;
+    --bg-light: #eef2f7;
+    --card-white: #ffffff;
+    --text-dark: #0e2e40;
+    --text-muted: #5f7f9a;
+    --success: #0b5e42;
+    --success-bg: #c8f0e6;
+    --danger: #b13b2d;
+    --danger-bg: #ffe1de;
+    --border-radius: 1.75rem;
+    --border-radius-sm: 1rem;
+    --shadow: 0 12px 24px -12px rgba(0, 0, 0, 0.15);
+    --shadow-hover: 0 24px 32px -18px rgba(0, 0, 0, 0.25);
+}
+
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    background: linear-gradient(135deg, #eef2f7 0%, #d9e2ef 100%);
+    font-family: 'Segoe UI', system-ui, -apple-system, 'Roboto', sans-serif;
+    min-height: 100vh;
+}
+
+/* Общая обёртка */
+.app-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 28px 24px;
+}
+
+/* Шапка сайта (навигация) */
+.site-header {
+    background: linear-gradient(135deg, var(--primary-dark) 0%, var(--primary) 100%);
+    border-radius: var(--border-radius);
+    padding: 1.2rem 2rem;
+    margin-bottom: 2rem;
+    color: white;
+    box-shadow: var(--shadow);
+}
+
+.site-header h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    letter-spacing: -0.3px;
+    margin: 0 0 0.25rem 0;
+}
+
+.site-header h1 i {
+    color: var(--accent);
+    margin-right: 8px;
+}
+
+.site-nav {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 0.75rem;
+    margin-top: 1rem;
+}
+
+.nav-link-custom {
+    background: rgba(255, 255, 255, 0.12);
+    color: white;
+    padding: 0.5rem 1.25rem;
+    border-radius: 60px;
+    text-decoration: none;
+    font-size: 0.85rem;
+    font-weight: 500;
+    transition: 0.2s;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+.nav-link-custom:hover {
+    background: var(--accent);
+    color: var(--primary-dark);
+    transform: translateY(-2px);
+}
+
+.nav-link-custom.active {
+    background: var(--accent);
+    color: var(--primary-dark);
+}
+
+/* Карточки */
+.card-modern {
+    background: var(--card-white);
+    border: none;
+    border-radius: var(--border-radius);
+    box-shadow: var(--shadow);
+    overflow: hidden;
+    transition: transform 0.2s, box-shadow 0.2s;
+}
+
+.card-modern:hover {
+    transform: translateY(-4px);
+    box-shadow: var(--shadow-hover);
+}
+
+.card-header-modern {
+    background: linear-gradient(105deg, #1a2639 0%, #0f172a 100%);
+    color: white;
+    padding: 1.2rem 1.8rem;
+    border-bottom: 3px solid var(--accent);
+}
+
+/* Бейджи */
+.badge-type {
+    display: inline-block;
+    padding: 5px 18px;
+    border-radius: 60px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    letter-spacing: 0.5px;
+    text-transform: uppercase;
+}
+
+.badge-type-common { background: #e3f2fd; color: #0b5e7c; }
+.badge-type-event { background: #fff3e0; color: #b45f1b; }
+.badge-type-community { background: #e8f5e9; color: #2e6b3e; }
+.badge-type-premium { background: #f3e5f5; color: #7b1fa2; }
+.badge-type-special { background: #ffebee; color: #c62828; }
+
+.badge-status-available {
+    background: var(--success-bg);
+    color: var(--success);
+    padding: 5px 18px;
+    border-radius: 60px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    display: inline-block;
+}
+.badge-status-soldout {
+    background: var(--danger-bg);
+    color: var(--danger);
+    padding: 5px 18px;
+    border-radius: 60px;
+    font-size: 0.7rem;
+    font-weight: 800;
+    display: inline-block;
+}
+
+.stat-pill {
+    background: #f0f4fa;
+    padding: 6px 18px;
+    border-radius: 60px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: var(--text-dark);
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+}
+
+/* Кнопки */
+.btn-primary-custom {
+    background: var(--primary-light);
+    color: white;
+    border: none;
+    padding: 10px 24px;
+    border-radius: 60px;
+    font-weight: 600;
+    transition: 0.2s;
+    cursor: pointer;
+}
+
+.btn-primary-custom:hover {
+    background: var(--primary-dark);
+    transform: translateY(-2px);
+}
+
+.btn-accent {
+    background: var(--accent);
+    color: var(--primary-dark);
+    border: none;
+    padding: 10px 24px;
+    border-radius: 60px;
+    font-weight: 700;
+    transition: 0.2s;
+    cursor: pointer;
+}
+
+.btn-accent:hover {
+    background: var(--accent-dark);
+    transform: scale(0.98);
+}
+
+/* Селекты и формы */
+.select-modern, .input-modern {
+    width: 100%;
+    padding: 12px 18px;
+    border-radius: 60px;
+    border: 1px solid #cbdde9;
+    background: white;
+    font-size: 0.9rem;
+    transition: 0.2s;
+}
+
+.select-modern:focus, .input-modern:focus {
+    outline: none;
+    border-color: var(--primary-light);
+    box-shadow: 0 0 0 3px rgba(44,125,160,0.2);
+}
+
+/* Скелетон загрузки */
+.skeleton {
+    background: linear-gradient(90deg, #e2e8f0 25%, #f1f5f9 50%, #e2e8f0 75%);
+    background-size: 200% 100%;
+    animation: shimmer 1.5s infinite;
+    border-radius: 12px;
+}
+
+@keyframes shimmer {
+    0% { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+
+/* Сетка галереи (3 колонки) */
+.grid-3cols {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 28px;
+}
+
+@media (max-width: 1000px) {
+    .grid-3cols { grid-template-columns: repeat(2, 1fr); gap: 24px; }
+    .app-container { padding: 20px; }
+}
+
+@media (max-width: 640px) {
+    .grid-3cols { grid-template-columns: 1fr; }
+}
+
+/* Футер */
+.site-footer {
+    margin-top: 3rem;
+    text-align: center;
+    font-size: 0.7rem;
+    color: var(--text-muted);
+    border-top: 1px solid #d4e2ec;
+    padding-top: 1.8rem;
+}
+
+/* Утилиты */
+.text-accent { color: var(--accent); }
+.bg-accent { background: var(--accent); }
+
+/* Адаптивные таблицы */
+.table-responsive-custom {
+    overflow-x: auto;
+}
+
+/* Анимации */
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+.fade-in {
+    animation: fadeIn 0.3s ease-out;
+}
+
+/* ============= СТИЛИ ДЛЯ FINDER ============= */
+
+/* Сетка фишек для Finder */
+.chip-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+    gap: 1rem;
+}
+
+.chip-card {
+    background: #ffffff;
+    border-radius: 1.2rem;
+    overflow: hidden;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.08);
+    transition: transform 0.2s, box-shadow 0.2s;
+    border: 1px solid rgba(0,0,0,0.04);
+    aspect-ratio: 1 / 1;
+    display: flex;
+    flex-direction: column;
+    position: relative;
+}
+
+.chip-card:hover {
+    transform: translateY(-4px);
+    box-shadow: 0 8px 25px rgba(0,0,0,0.12);
+}
+
+.chip-image-wrapper {
+    flex: 1;
+    background: #f1f5f9;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 0.5rem;
+    min-height: 120px;
+    position: relative;
+    overflow: hidden;
+}
+
+.chip-image-wrapper img {
+    max-width: 100%;
+    max-height: 100%;
+    object-fit: contain;
+    transition: transform 0.3s;
+}
+
+.chip-card:hover .chip-image-wrapper img {
+    transform: scale(1.05);
+}
+
+.chip-status-icon {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+    font-size: 1.4rem;
+    filter: drop-shadow(0 2px 4px rgba(0,0,0,0.3));
+    background: rgba(0,0,0,0.5);
+    border-radius: 50%;
+    width: 32px;
+    height: 32px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+    border: 2px solid rgba(255,255,255,0.2);
+}
+
+.chip-grade-badge {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    font-size: 0.6rem;
+    font-weight: 700;
+    padding: 2px 10px;
+    border-radius: 30px;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+    backdrop-filter: blur(4px);
+    background: rgba(0,0,0,0.7);
+    color: white;
+    border: 1px solid rgba(255,255,255,0.15);
+}
+
+.chip-info {
+    padding: 0.6rem 0.8rem 0.8rem;
+    background: white;
+    flex-shrink: 0;
+}
+
+.chip-collection {
+    font-size: 0.7rem;
+    color: #64748b;
+    font-weight: 500;
+    margin-bottom: 0.2rem;
+}
+
+.chip-owner {
+    font-size: 0.65rem;
+    color: #334155;
+    background: #f1f5f9;
+    padding: 1px 8px;
+    border-radius: 30px;
+    display: inline-block;
+    max-width: 100%;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.chip-id {
+    font-size: 0.55rem;
+    color: #94a3b8;
+    font-family: monospace;
+}
+
+.chip-status-label {
+    font-size: 0.6rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.section-title {
+    font-weight: 700;
+    font-size: 1.1rem;
+    margin-bottom: 0.9rem;
+    color: #0f172a;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border-left: 4px solid #fbbf24;
+    padding-left: 12px;
+}
+
+.status-group {
+    margin-bottom: 2rem;
+}
+
+.status-group:last-child {
+    margin-bottom: 0;
+}
+
+.status-group-header {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin-bottom: 0.8rem;
+}
+
+.empty-state {
+    text-align: center;
+    padding: 3rem 1rem;
+    color: #475569;
+}
+
+/* Адаптив для Finder */
+@media (max-width: 768px) {
+    .chip-grid {
+        grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+        gap: 0.75rem;
+    }
+    .chip-image-wrapper {
+        min-height: 90px;
+    }
+    .chip-info {
+        padding: 0.4rem 0.6rem 0.6rem;
+    }
+}
+
+@media (max-width: 480px) {
+    .chip-grid {
+        grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+        gap: 0.5rem;
+    }
+    .chip-image-wrapper {
+        min-height: 70px;
+    }
+    .chip-status-icon {
+        width: 26px;
+        height: 26px;
+        font-size: 1rem;
+        top: 4px;
+        right: 4px;
+    }
+    .chip-grade-badge {
+        font-size: 0.5rem;
+        padding: 1px 6px;
+        bottom: 4px;
+        left: 4px;
+    }
+}

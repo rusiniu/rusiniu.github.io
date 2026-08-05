@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Аналитика рынка Caps Game</title>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        .filter-panel {
+            background: white;
+            border-radius: var(--border-radius);
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+        .item-row {
+            background: white;
+            border-radius: 1rem;
+            padding: 1rem;
+            margin-bottom: 0.75rem;
+            display: flex;
+            align-items: center;
+            gap: 1rem;
+            transition: 0.2s;
+            border: 1px solid #eef2f7;
+        }
+        .item-row:hover {
+            background: #f8fafc;
+            transform: translateX(4px);
+        }
+        .item-img {
+            width: 56px;
+            height: 56px;
+            object-fit: contain;
+            border-radius: 12px;
+            background: #f0f4fa;
+        }
+        .quality-badge {
+            padding: 2px 10px;
+            border-radius: 20px;
+            font-size: 0.7rem;
+            font-weight: 600;
+        }
+        .quality-DIAMOND { background: #bae6fd; color: #0369a1; }
+        .quality-EPIC { background: #e0f2fe; color: #0284c7; }
+        .quality-LEGEND { background: #fae8ff; color: #a21caf; }
+        .quality-RARE { background: #dcfce7; color: #15803d; }
+        .quality-COMMON { background: #f1f5f9; color: #334155; }
+        .price-ton {
+            font-weight: 800;
+            font-size: 1.1rem;
+            color: var(--success);
+        }
+        .item-list-scroll {
+            max-height: 600px;
+            overflow-y: auto;
+            border-radius: var(--border-radius-sm);
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="site-header">
+        <h1><i class="bi bi-graph-up"></i> Аналитика рынка Caps Game</h1>
+        <div class="site-nav">
+            <a href="index.html" class="nav-link-custom"><i class="bi bi-house"></i> Портал</a>
+            <a href="market.html" class="nav-link-custom active"><i class="bi bi-graph-up"></i> Аналитика рынка</a>
+            <a href="collections.html" class="nav-link-custom"><i class="bi bi-images"></i> Галерея</a>
+            <a href="recruiter.html" class="nav-link-custom"><i class="bi bi-person-badge"></i> Рекрутер</a>
+            <a href="finder.html" class="nav-link-custom"><i class="bi bi-search"></i> Финдер</a>
+        </div>
+    </div>
+
+    <div class="filter-panel">
+        <h4 style="margin-bottom: 1rem;"><i class="bi bi-funnel"></i> Фильтры</h4>
+        <div class="row g-3">
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Коллекция</label>
+                <select id="collectionSelect" class="select-modern">
+                    <option value="">Все коллекции</option>
+                </select>
+            </div>
+            <div class="col-md-3">
+                <label class="form-label fw-semibold">Качество</label>
+                <select id="qualitySelect" class="select-modern">
+                    <option value="">Все</option>
+                    <option value="COMMON">COMMON</option>
+                    <option value="COMMON_PLUS">COMMON_PLUS</option>
+                    <option value="RARE">RARE</option>
+                    <option value="RARE_PLUS">RARE_PLUS</option>
+                    <option value="EPIC">EPIC</option>
+                    <option value="EPIC_PLUS">EPIC_PLUS</option>
+                    <option value="LEGEND">LEGEND</option>
+                    <option value="LEGEND_PLUS">LEGEND_PLUS</option>
+                    <option value="DIAMOND">DIAMOND</option>
+                </select>
+            </div>
+            <div class="col-md-2">
+                <label class="form-label fw-semibold">Лимит</label>
+                <input type="number" id="limitInput" class="input-modern" value="100" min="1" max="1000">
+            </div>
+            <div class="col-md-3 d-flex align-items-end">
+                <button id="loadBtn" class="btn-accent w-100"><i class="bi bi-search"></i> Загрузить</button>
+            </div>
+        </div>
+        <div class="form-check mt-3">
+            <input class="form-check-input" type="checkbox" id="sortByNumber">
+            <label class="form-check-label" for="sortByNumber">
+                Сортировать по номеру (вместо цены)
+            </label>
+        </div>
+    </div>
+
+    <div id="stats" class="card-modern" style="padding: 1.5rem; margin-bottom: 1.5rem;">
+        <div class="text-muted text-center">📊 Загрузите данные для отображения статистики</div>
+    </div>
+
+    <div class="card-modern" style="padding: 1.5rem; margin-bottom: 1.5rem;">
+        <canvas id="priceChart" height="200"></canvas>
+    </div>
+
+    <div>
+        <h4><i class="bi bi-list-ul"></i> Список предметов</h4>
+        <div id="itemList" class="item-list-scroll mt-3">
+            <div class="text-center text-muted p-5">Загрузите данные для отображения списка</div>
+        </div>
+    </div>
+
+    <div class="site-footer">
+        <i class="bi bi-currency-bitcoin"></i> Цены указаны в TON · Данные из открытого API
+    </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+    const FIRESTORE_URL = "https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents:runQuery";
+    const STORAGE_BASE_URL = "https://firebasestorage.googleapis.com/v0/b/capsgame-prod.appspot.com/o/";
+    let currentChart = null;
+
+    async function loadCollectionsForSelect() {
+        const collections = await CapsTools.fetchCollectionsList();
+        const select = document.getElementById('collectionSelect');
+        select.innerHTML = '<option value="">Все коллекции</option>';
+        collections.forEach(col => {
+            const option = document.createElement('option');
+            option.value = col.id;
+            option.textContent = `${col.title} (${col.size}шт)`;
+            select.appendChild(option);
+        });
+        return collections;
+    }
+
+    async function fetchMarketData(collection, quality, limit, sortByNumber) {
+        const whereFilters = [{
+            "fieldFilter": {
+                "field": {"fieldPath": "status"},
+                "op": "EQUAL",
+                "value": {"stringValue": "SALE"}
+            }
+        }];
+        if (collection) {
+            whereFilters.push({
+                "fieldFilter": {
+                    "field": {"fieldPath": "collectionId"},
+                    "op": "EQUAL",
+                    "value": {"stringValue": collection}
+                }
+            });
+        }
+        if (quality) {
+            whereFilters.push({
+                "fieldFilter": {
+                    "field": {"fieldPath": "grade"},
+                    "op": "EQUAL",
+                    "value": {"stringValue": quality}
+                }
+            });
+        }
+        const where = whereFilters.length === 1 ? whereFilters[0] : {
+            "compositeFilter": {"op": "AND", "filters": whereFilters}
+        };
+        const orderBy = sortByNumber ?
+            [{"field": {"fieldPath": "number"}, "direction": "ASCENDING"}] :
+            [{"field": {"fieldPath": "price"}, "direction": "ASCENDING"}];
+        const query = {
+            "structuredQuery": {
+                "from": [{"collectionId": "Caps"}],
+                "where": where,
+                "orderBy": orderBy,
+                "limit": limit
+            }
+        };
+        const response = await fetch(FIRESTORE_URL, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify(query)
+        });
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+        const data = await response.json();
+        return data.filter(item => item.document).map(item => {
+            const fields = item.document.fields;
+            const imageUrl = CapsTools.getFieldValue(fields, 'url');
+            return {
+                id: item.document.name.split('/').pop(),
+                collection: CapsTools.getFieldValue(fields, 'collection', 'Unknown'),
+                quality: CapsTools.getFieldValue(fields, 'grade', 'UNKNOWN'),
+                price: CapsTools.getFieldValue(fields, 'price', 0) / 1000000000,
+                itemId: CapsTools.getFieldValue(fields, 'number', 'Unknown'),
+                imageUrl: imageUrl ? `${STORAGE_BASE_URL}${encodeURIComponent(imageUrl)}?alt=media` : null
+            };
+        });
+    }
+
+    function getQualityClass(quality) {
+        const q = quality.split('_')[0];
+        return `quality-${q}`;
+    }
+
+    async function loadMarketData() {
+        const collection = document.getElementById('collectionSelect').value;
+        const quality = document.getElementById('qualitySelect').value;
+        const limit = parseInt(document.getElementById('limitInput').value) || 100;
+        const sortByNumber = document.getElementById('sortByNumber').checked;
+        const loadBtn = document.getElementById('loadBtn');
+        loadBtn.disabled = true;
+        loadBtn.innerHTML = '<i class="bi bi-hourglass-split"></i> Загрузка...';
+        
+        try {
+            const items = await fetchMarketData(collection, quality, limit, sortByNumber);
+            if (items.length === 0) {
+                document.getElementById('stats').innerHTML = '<div class="text-center p-4">😢 Нет предметов в продаже с выбранными фильтрами</div>';
+                document.getElementById('itemList').innerHTML = '<div class="text-center p-4 text-muted">Нет данных</div>';
+                if (currentChart) currentChart.destroy();
+                return;
+            }
+            const prices = items.map(i => i.price);
+            const minPrice = Math.min(...prices);
+            const maxPrice = Math.max(...prices);
+            const avgPrice = (prices.reduce((a,b)=>a+b,0)/prices.length).toFixed(2);
+            const totalValue = prices.reduce((a,b)=>a+b,0);
+            const sorted = [...prices].sort((a,b)=>a-b);
+            const median = sorted.length % 2 === 0 ? (sorted[sorted.length/2-1]+sorted[sorted.length/2])/2 : sorted[Math.floor(sorted.length/2)];
+            document.getElementById('stats').innerHTML = `
+                <div class="row g-3 text-center">
+                    <div class="col-md-3"><div class="stat-pill justify-content-center">📊 Найдено: ${items.length}</div></div>
+                    <div class="col-md-3"><div class="stat-pill justify-content-center">📉 Мин: ${minPrice.toFixed(2)} TON</div></div>
+                    <div class="col-md-3"><div class="stat-pill justify-content-center">📈 Макс: ${maxPrice.toFixed(2)} TON</div></div>
+                    <div class="col-md-3"><div class="stat-pill justify-content-center">💰 Средняя: ${avgPrice} TON</div></div>
+                    <div class="col-md-4"><div class="stat-pill justify-content-center">🎯 Медиана: ${median.toFixed(2)} TON</div></div>
+                    <div class="col-md-4"><div class="stat-pill justify-content-center">💵 Общая стоимость: ${totalValue.toFixed(2)} TON</div></div>
+                    <div class="col-md-4"><div class="stat-pill justify-content-center">📐 Разброс: ${(maxPrice-minPrice).toFixed(2)} TON</div></div>
+                </div>
+            `;
+            const container = document.getElementById('itemList');
+            container.innerHTML = items.map(item => `
+                <div class="item-row fade-in">
+                    ${item.imageUrl ? `<img src="${item.imageUrl}" class="item-img" onerror="this.src='data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2256%22%20height%3D%2256%22%3E%3Crect%20width%3D%2256%22%20height%3D%2256%22%20fill%3D%22%23f0f4fa%22%2F%3E%3C%2Fsvg%3E'">` : `<div class="item-img" style="background:#f0f4fa; display:flex; align-items:center; justify-content:center;">🎴</div>`}
+                    <div style="flex:1">
+                        <div><strong>${CapsTools.escapeHtml(item.collection)}</strong></div>
+                        <div><span class="quality-badge ${getQualityClass(item.quality)}">${item.quality}</span> <span class="text-muted ms-2">#${item.itemId}</span></div>
+                    </div>
+                    <div class="price-ton">${item.price.toFixed(2)} TON</div>
+                </div>
+            `).join('');
+            if (currentChart) currentChart.destroy();
+            const ctx = document.getElementById('priceChart').getContext('2d');
+            const priceGroups = {};
+            items.forEach(item => { priceGroups[item.price] = (priceGroups[item.price] || 0) + 1; });
+            const pricesSorted = Object.keys(priceGroups).map(Number).sort((a,b)=>a-b);
+            currentChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: pricesSorted.map(p=>p.toFixed(2)),
+                    datasets: [{label: 'Количество', data: pricesSorted.map(p=>priceGroups[p]), backgroundColor: '#2c6e8f', borderRadius: 8}]
+                },
+                options: {responsive: true, plugins: {title: {display: true, text: 'Распределение цен'}}}
+            });
+        } catch (err) {
+            document.getElementById('stats').innerHTML = `<div class="alert alert-danger">⚠️ Ошибка: ${err.message}</div>`;
+        } finally {
+            loadBtn.disabled = false;
+            loadBtn.innerHTML = '<i class="bi bi-search"></i> Загрузить';
+        }
+    }
+
+    document.addEventListener('DOMContentLoaded', async () => {
+        await loadCollectionsForSelect();
+        document.getElementById('loadBtn').addEventListener('click', loadMarketData);
+        setTimeout(loadMarketData, 500);
+    });
+</script>
+</body>
+</html>

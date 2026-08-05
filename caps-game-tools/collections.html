@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Caps Game — Галерея коллекций</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        /* Дополнительные стили только для галереи */
+        .chip-card {
+            background: white;
+            border-radius: 28px;
+            overflow: hidden;
+            box-shadow: var(--shadow);
+            transition: transform 0.2s, box-shadow 0.2s;
+            text-align: center;
+            padding: 24px 20px 20px;
+        }
+        .chip-card:hover {
+            transform: translateY(-5px);
+            box-shadow: var(--shadow-hover);
+        }
+        .chip-img {
+            background: #fbfeff;
+            border-radius: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 200px;
+            padding: 12px;
+        }
+        .chip-img img {
+            max-width: 100%;
+            max-height: 170px;
+            object-fit: contain;
+            border-radius: 18px;
+        }
+        .chip-number {
+            font-weight: 800;
+            font-size: 1.1rem;
+            margin-top: 18px;
+            background: #eef3fc;
+            display: inline-block;
+            padding: 6px 20px;
+            border-radius: 60px;
+            color: var(--text-dark);
+        }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="site-header">
+        <h1><i class="bi bi-grid-3x3-gap-fill"></i> Caps Game · Галерея коллекций</h1>
+        <div class="site-nav">
+            <a href="index.html" class="nav-link-custom"><i class="bi bi-house"></i> Портал</a>
+            <a href="market.html" class="nav-link-custom"><i class="bi bi-graph-up"></i> Аналитика рынка</a>
+            <a href="collections.html" class="nav-link-custom active"><i class="bi bi-images"></i> Галерея</a>
+            <a href="recruiter.html" class="nav-link-custom"><i class="bi bi-person-badge"></i> Рекрутер</a>
+            <a href="finder.html" class="nav-link-custom"><i class="bi bi-search"></i> Финдер</a>
+        </div>
+    </div>
+
+    <div class="selector-panel" style="background: white; border-radius: 1.75rem; padding: 1.2rem 1.8rem; margin-bottom: 2rem;">
+        <div class="field">
+            <label style="font-size: 0.7rem; font-weight: 800; text-transform: uppercase; color: #2c5a7a;">📁 ВЫБЕРИТЕ КОЛЛЕКЦИЮ</label>
+            <select id="collectionSelect" class="select-modern">
+                <option value="">Загрузка списка...</option>
+            </select>
+        </div>
+    </div>
+
+    <div id="infoBlock" class="card-modern" style="display: none; margin-bottom: 2rem; padding: 1.4rem 2rem;"></div>
+
+    <div class="gallery-header" style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 1.8rem;">
+        <h2 style="font-size: 1.5rem;"><i class="bi bi-images"></i> Карточки коллекции</h2>
+        <div id="itemsCounter" class="stat-pill">—</div>
+    </div>
+    <div id="galleryContainer" class="grid-3cols">
+        <div class="loading-placeholder" style="grid-column: 1/-1; text-align: center; padding: 3rem;">✨ Выберите коллекцию из списка выше</div>
+    </div>
+
+    <div class="site-footer">
+        <i class="bi bi-cloud-check"></i> Формат: collections/название_коллекции/номер.png?alt=media | Данные из официального API
+    </div>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+    let collectionsList = [];
+    
+    async function init() {
+        collectionsList = await CapsTools.fetchCollectionsList();
+        const select = document.getElementById('collectionSelect');
+        
+        if (!collectionsList.length) {
+            select.innerHTML = '<option value="">❌ Ошибка загрузки</option>';
+            return;
+        }
+        
+        select.innerHTML = '<option value="">-- Выберите коллекцию --</option>';
+        collectionsList.forEach(col => {
+            const option = document.createElement('option');
+            option.value = col.id;
+            const emoji = col.status === 'available' ? '✅' : '🔒';
+            const typeEmoji = CapsTools.getTypeEmoji(col.type);
+            option.textContent = `${emoji} ${typeEmoji} ${col.title}  •  ${col.size} фишек`;
+            select.appendChild(option);
+        });
+        
+        select.addEventListener('change', onCollectionChange);
+        
+        const firstAvailable = collectionsList.find(c => c.status === 'available') || collectionsList[0];
+        if (firstAvailable) {
+            select.value = firstAvailable.id;
+            await onCollectionChange();
+        }
+    }
+    
+    async function onCollectionChange() {
+        const selectedId = document.getElementById('collectionSelect').value;
+        if (!selectedId) {
+            document.getElementById('galleryContainer').innerHTML = '<div class="loading-placeholder" style="grid-column:1/-1;">✨ Выберите коллекцию</div>';
+            document.getElementById('infoBlock').style.display = 'none';
+            return;
+        }
+        
+        const collection = collectionsList.find(c => c.id === selectedId);
+        if (!collection) return;
+        
+        // Отображаем информацию
+        const infoDiv = document.getElementById('infoBlock');
+        const availableTotal = collection.supply - collection.used;
+        const burnedPercent = collection.supply > 0 ? ((collection.burned / collection.supply) * 100).toFixed(1) : 0;
+        
+        infoDiv.style.display = 'block';
+        infoDiv.innerHTML = `
+            <div style="display: flex; flex-wrap: wrap; justify-content: space-between; align-items: baseline; gap: 12px; margin-bottom: 1rem;">
+                <h2 style="margin:0;">${collection.hasCustomDiamond ? '💎' : ''} ${CapsTools.escapeHtml(collection.title)}</h2>
+                <div style="display: flex; gap: 10px;">
+                    <span class="badge-type ${CapsTools.getTypeClass(collection.type)}">${collection.type?.toUpperCase() || 'COMMON'}</span>
+                    <span class="badge-status-available" style="padding: 5px 18px; border-radius: 60px;">${collection.status === 'available' ? '✅ ДОСТУПНА' : '🔒 ПРОДАНА'}</span>
+                </div>
+            </div>
+            <div style="display: flex; flex-wrap: wrap; gap: 16px;">
+                <span class="stat-pill">🎴 Размер: <strong>${collection.size}</strong> фишек</span>
+                <span class="stat-pill">📦 Тираж: ${collection.supply.toLocaleString()}</span>
+                <span class="stat-pill">✨ Доступно: ${availableTotal.toLocaleString()}</span>
+                <span class="stat-pill">🔥 Сожжено: ${collection.burned.toLocaleString()} (${burnedPercent}%)</span>
+            </div>
+            <div class="stat-pill" style="margin-top: 14px; display: inline-block;">📅 Релиз: ${collection.releaseDate ? new Date(collection.releaseDate).toLocaleDateString('ru-RU') : '—'}</div>
+        `;
+        
+        // Генерируем галерею
+        const total = collection.size;
+        document.getElementById('itemsCounter').innerHTML = `🃏 Всего: ${total}`;
+        const container = document.getElementById('galleryContainer');
+        const encodedId = encodeURIComponent(collection.id);
+        let html = '';
+        
+        for (let i = 1; i <= total; i++) {
+            html += `
+                <div class="chip-card">
+                    <div class="chip-img">
+                        <img src="https://firebasestorage.googleapis.com/v0/b/capsgame-prod.appspot.com/o/collections%2F${encodedId}%2F${i}.png?alt=media" 
+                             loading="lazy" 
+                             alt="#${i}"
+                             onerror="this.src='data:image/svg+xml,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%22180%22%20height%3D%22180%22%20viewBox%3D%220%200%20180%20180%22%3E%3Crect%20width%3D%22180%22%20height%3D%22180%22%20fill%3D%22%23f4f8fe%22%2F%3E%3Ctext%20x%3D%2290%22%20y%3D%22100%22%20font-size%3D%2214%22%20text-anchor%3D%22middle%22%20fill%3D%22%238aa9c4%22%3E%E2%9D%8C%3C%2Ftext%3E%3C%2Fsvg%3E'">
+                    </div>
+                    <div class="chip-number">#${i}</div>
+                </div>
+            `;
+        }
+        container.innerHTML = html;
+    }
+    
+    init();
+</script>
+</body>
+</html>
