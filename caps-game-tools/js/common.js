@@ -4,7 +4,13 @@
 const CONFIG = {
     FIRESTORE_QUERY: "https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents:runQuery",
     COLLECTIONS_API: "https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents/Static/CapsCollections",
-    STORAGE_BASE: "https://firebasestorage.googleapis.com/v0/b/capsgame-prod.appspot.com/o/"
+    STORAGE_BASE: "https://firebasestorage.googleapis.com/v0/b/capsgame-prod.appspot.com/o/",
+    USERS_API: (tgId) => `https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents/Users/${tgId}`,
+    SQUADS_INFO_API: (squadId) => `https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents/SquadsV2/${squadId}`,
+    SQUADS_REQUESTS_API: (squadId) => `https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents/SquadsV2/${squadId}/Requests`,
+    SQUAD_ID: '-1002917473074',
+    PAGE_SIZE: 50,
+    GRADE_ORDER: ['COMMON', 'COMMON_PLUS', 'RARE', 'RARE_PLUS', 'EPIC', 'EPIC_PLUS', 'LEGEND', 'LEGEND_PLUS', 'DIAMOND'],
 };
 
 // Безопасное получение значения из Firestore fields
@@ -16,7 +22,16 @@ function getFieldValue(fields, fieldName, defaultValue = null) {
     if (field.doubleValue !== undefined) return parseFloat(field.doubleValue);
     if (field.booleanValue !== undefined) return field.booleanValue;
     if (field.timestampValue !== undefined) return field.timestampValue;
+    if (field.mapValue?.fields) return field.mapValue.fields;
+    if (field.arrayValue?.values) return field.arrayValue.values;
     return defaultValue;
+}
+
+// Безопасное приведение к числу
+function safeNumber(value, defaultValue = 0) {
+    if (value === undefined || value === null) return defaultValue;
+    const num = Number(value);
+    return isNaN(num) ? defaultValue : num;
 }
 
 // Экранирование HTML
@@ -43,6 +58,14 @@ function formatFirestoreDate(timestampValue) {
     return date.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 }
 
+// Форматирование времени
+function formatTime(timestampValue) {
+    if (!timestampValue) return '—';
+    const date = new Date(timestampValue);
+    if (isNaN(date.getTime())) return '—';
+    return date.toLocaleString('ru-RU', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+}
+
 // Получение класса для типа коллекции
 function getTypeClass(type) {
     const classes = {
@@ -67,7 +90,7 @@ function getTypeEmoji(type) {
     return emojis[type] || '🎴';
 }
 
-// Загрузка списка коллекций (общая для market и collections)
+// Загрузка списка коллекций
 async function fetchCollectionsList() {
     try {
         const response = await fetch(CONFIG.COLLECTIONS_API);
@@ -110,7 +133,135 @@ async function fetchCollectionsList() {
     }
 }
 
-// ============= НОВЫЕ ФУНКЦИИ ДЛЯ FINDER =============
+// ============= ФУНКЦИИ ДЛЯ RECRUITER =============
+
+// Построить URL изображения
+function buildImageUrl(path) {
+    if (!path) return null;
+    if (path.startsWith('http://') || path.startsWith('https://')) return path;
+    const encodedPath = encodeURIComponent(path);
+    return `${CONFIG.STORAGE_BASE}${encodedPath}?alt=media`;
+}
+
+// Загрузка профиля игрока
+async function fetchPlayerProfile(tgId) {
+    const apiUrl = CONFIG.USERS_API(tgId);
+    const response = await fetch(apiUrl);
+    if (!response.ok) {
+        if (response.status === 404) throw new Error('Игрок не найден. Проверьте TG ID');
+        throw new Error(`Ошибка API: ${response.status}`);
+    }
+    const data = await response.json();
+    if (!data.fields) throw new Error('Неверный формат ответа');
+    return data;
+}
+
+// Получить параметр из URL
+function getUrlParam(param) {
+    const urlParams = new URLSearchParams(window.location.search);
+    return urlParams.get(param);
+}
+
+// Получить отсортированные редкости
+function getSortedGrades(gradeStats) {
+    const result = [];
+    for (const grade of CONFIG.GRADE_ORDER) {
+        if (gradeStats[grade] > 0) {
+            result.push({ grade, count: gradeStats[grade] });
+        }
+    }
+    return result;
+}
+
+// Классы для редкостей
+function getGradeClass(grade) {
+    const classes = {
+        'COMMON': 'grade-common',
+        'COMMON_PLUS': 'grade-common-plus',
+        'RARE': 'grade-rare',
+        'RARE_PLUS': 'grade-rare-plus',
+        'EPIC': 'grade-epic',
+        'EPIC_PLUS': 'grade-epic-plus',
+        'LEGEND': 'grade-legend',
+        'LEGEND_PLUS': 'grade-legend-plus',
+        'DIAMOND': 'grade-diamond'
+    };
+    return classes[grade] || 'grade-common';
+}
+
+// ============= ФУНКЦИИ ДЛЯ SQUAD-REQUESTS =============
+
+// Загрузка информации о дворе
+async function fetchSquadInfo(squadId) {
+    const url = CONFIG.SQUADS_INFO_API(squadId);
+    try {
+        const response = await fetch(url);
+        if (!response.ok) return null;
+        return await response.json();
+    } catch {
+        return null;
+    }
+}
+
+// Загрузка страницы заявок
+async function fetchRequestsPage(squadId, pageToken = null) {
+    let url = `${CONFIG.SQUADS_REQUESTS_API(squadId)}?pageSize=${CONFIG.PAGE_SIZE}`;
+    if (pageToken) {
+        url += `&pageToken=${encodeURIComponent(pageToken)}`;
+    }
+    try {
+        const response = await fetch(url);
+        if (!response.ok) {
+            if (response.status === 404) return { requests: [], nextPageToken: null };
+            throw new Error(`HTTP ${response.status}`);
+        }
+        const data = await response.json();
+        const documents = data.documents || [];
+        const nextPageToken = data.nextPageToken || null;
+
+        const requests = documents.map(doc => {
+            const fields = doc.fields || {};
+            const nameParts = doc.name.split('/');
+            const requestId = nameParts[nameParts.length - 1];
+            const status = getFieldValue(fields, 'status', 'UNKNOWN');
+            const createdAt = getFieldValue(fields, 'createdAt', null);
+            const updatedAt = getFieldValue(fields, 'updatedAt', null);
+            const userId = getFieldValue(fields, 'userId', requestId);
+
+            return {
+                id: requestId,
+                userId: userId || requestId,
+                status: status,
+                createdAt: createdAt,
+                updatedAt: updatedAt,
+                raw: doc
+            };
+        });
+
+        return { requests, nextPageToken };
+    } catch (err) {
+        console.error('Ошибка загрузки заявок:', err);
+        throw err;
+    }
+}
+
+// Загрузка всех заявок (с пагинацией)
+async function fetchAllRequests(squadId) {
+    let all = [];
+    let pageToken = null;
+    let hasMore = true;
+
+    while (hasMore) {
+        const result = await fetchRequestsPage(squadId, pageToken);
+        all = all.concat(result.requests);
+        pageToken = result.nextPageToken;
+        hasMore = !!pageToken;
+    }
+
+    return all;
+}
+
+// ============= ФУНКЦИИ ДЛЯ FINDER =============
 
 // Маппинг статусов фишек
 const STATUS_MAP = {
@@ -147,32 +298,69 @@ function getGradeInfo(grade) {
     return GRADE_MAP[grade] || { label: grade || 'Unknown', color: '#6b7280' };
 }
 
-// Построить URL изображения
-function buildImageUrl(path) {
-    if (!path) return null;
-    const encodedPath = encodeURIComponent(path);
-    return `${CONFIG.STORAGE_BASE}${encodedPath}?alt=media`;
+// Поиск фишек по номеру
+async function searchCapsByNumber(number) {
+    const query = {
+        structuredQuery: {
+            from: [{ collectionId: "Caps" }],
+            where: {
+                fieldFilter: {
+                    field: { fieldPath: "number" },
+                    op: "EQUAL",
+                    value: { integerValue: String(number) }
+                }
+            },
+            limit: 200
+        }
+    };
+
+    const response = await fetch(CONFIG.FIRESTORE_QUERY, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(query)
+    });
+
+    if (!response.ok) {
+        throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    if (!Array.isArray(data)) {
+        throw new Error('Неверный формат ответа от сервера');
+    }
+    return data;
 }
 
-// Показать уведомление (тост) — можно расширить
+// Показать уведомление (тост)
 function showToast(message, type = 'info') {
     console.log(`[${type}] ${message}`);
+    // Можно добавить визуальный тост позже
 }
 
-// Экспортируем если нужно (для модулей, но пока просто глобально)
+// Экспортируем в глобальный объект
 window.CapsTools = {
     CONFIG,
     getFieldValue,
+    safeNumber,
     escapeHtml,
     formatNumber,
     formatFirestoreDate,
+    formatTime,
     getTypeClass,
     getTypeEmoji,
     fetchCollectionsList,
-    showToast,
-    STATUS_MAP,
-    GRADE_MAP,
+    fetchPlayerProfile,
+    fetchSquadInfo,
+    fetchRequestsPage,
+    fetchAllRequests,
+    buildImageUrl,
+    getUrlParam,
+    getSortedGrades,
+    getGradeClass,
     getStatusInfo,
     getGradeInfo,
-    buildImageUrl
+    searchCapsByNumber,
+    showToast,
+    STATUS_MAP,
+    GRADE_MAP
 };

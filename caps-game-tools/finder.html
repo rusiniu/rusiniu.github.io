@@ -8,26 +8,12 @@
     <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <link rel="stylesheet" href="css/common.css">
     <style>
-        /* Дополнительные стили специфичные для Finder */
-        .btn-gold {
-            background: #fbbf24;
-            color: #0f172a;
-            font-weight: 700;
-            border: none;
-            transition: 0.2s;
-        }
-        .btn-gold:hover {
-            background: #f59e0b;
-            transform: scale(0.98);
-        }
-
         .result-card {
             background: white;
             border-radius: var(--border-radius);
             overflow: hidden;
             box-shadow: var(--shadow);
         }
-
         .result-header {
             background: linear-gradient(105deg, #1a2639 0%, #0f172a 100%);
             color: white;
@@ -39,7 +25,6 @@
             flex-wrap: wrap;
             gap: 10px;
         }
-
         .result-header .stat-badge {
             background: rgba(255,255,255,0.15);
             border-radius: 40px;
@@ -49,83 +34,19 @@
             align-items: center;
             gap: 6px;
         }
-
         .result-body {
             padding: 1.5rem 1.8rem;
         }
-
         .finder-footer {
             margin-top: 2rem;
             text-align: center;
             font-size: 0.75rem;
             color: var(--text-muted);
         }
-
-        .section-title {
-            font-weight: 700;
-            font-size: 1.1rem;
-            margin-bottom: 0.9rem;
-            color: #0f172a;
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            border-left: 4px solid var(--accent);
-            padding-left: 12px;
-        }
-
-        .status-group {
-            margin-bottom: 2rem;
-        }
-        .status-group:last-child {
-            margin-bottom: 0;
-        }
-
-        .status-group-header {
-            display: flex;
-            align-items: center;
-            gap: 10px;
-            margin-bottom: 0.8rem;
-        }
-
-        .status-group-header .status-emoji {
-            font-size: 1.5rem;
-        }
-
-        /* Сетка фишек */
-        .chip-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-            gap: 1rem;
-        }
-
-        .empty-state {
-            text-align: center;
-            padding: 3rem 1rem;
-            color: #475569;
-        }
-
-        .empty-state i {
-            font-size: 3rem;
-            display: block;
-            margin-bottom: 1rem;
-            opacity: 0.4;
-        }
-
         @media (max-width: 768px) {
             .result-header {
                 flex-direction: column;
                 align-items: flex-start;
-            }
-            .chip-grid {
-                grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
-                gap: 0.75rem;
-            }
-        }
-
-        @media (max-width: 480px) {
-            .chip-grid {
-                grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-                gap: 0.5rem;
             }
             .result-body {
                 padding: 1rem;
@@ -147,7 +68,7 @@
         </div>
     </div>
 
-    <!-- Красивая строка поиска как в Recruiter -->
+    <!-- Поиск -->
     <div class="row justify-content-center mb-5">
         <div class="col-md-8 col-lg-6">
             <div class="card shadow border-0 rounded-4">
@@ -156,7 +77,7 @@
                     <div class="input-group">
                         <span class="input-group-text bg-white"><i class="bi bi-tag"></i></span>
                         <input type="number" id="capNumberInput" class="form-control form-control-lg" placeholder="2755" value="2755">
-                        <button id="searchBtn" class="btn btn-gold btn-lg px-4">Найти</button>
+                        <button id="searchBtn" class="btn-gold btn btn-lg px-4">Найти</button>
                     </div>
                     <div class="form-text mt-2">Введите номер фишки — данные из открытого API игры</div>
                 </div>
@@ -192,230 +113,193 @@
 
 <script src="js/common.js"></script>
 <script>
-    const FIRESTORE_URL = 'https://firestore.googleapis.com/v1/projects/capsgame-prod/databases/(default)/documents:runQuery';
+    (function() {
+        const { getFieldValue, buildImageUrl, escapeHtml, getStatusInfo, getGradeInfo, searchCapsByNumber } = window.CapsTools;
 
-    // Функция отрисовки карточки фишки с использованием CapsTools
-    function renderChipCard(item) {
-        const fields = item.document?.fields || {};
-        const id = CapsTools.getFieldValue(fields, 'id', '—');
-        const collectionId = CapsTools.getFieldValue(fields, 'collectionId', 'unknown');
-        const collection = CapsTools.getFieldValue(fields, 'collection', collectionId);
-        const grade = CapsTools.getFieldValue(fields, 'grade', 'COMMON');
-        const status = CapsTools.getFieldValue(fields, 'status', 'UNKNOWN');
-        const owner = CapsTools.getFieldValue(fields, 'owner', null);
-        const url = CapsTools.getFieldValue(fields, 'url', null);
-        const isNft = CapsTools.getFieldValue(fields, 'isNft', false);
+        function renderChipCard(item) {
+            const fields = item.document?.fields || {};
+            const id = getFieldValue(fields, 'id', '—');
+            const collectionId = getFieldValue(fields, 'collectionId', 'unknown');
+            const collection = getFieldValue(fields, 'collection', collectionId);
+            const grade = getFieldValue(fields, 'grade', 'COMMON');
+            const status = getFieldValue(fields, 'status', 'UNKNOWN');
+            const owner = getFieldValue(fields, 'owner', null);
+            const url = getFieldValue(fields, 'url', null);
+            const isNft = getFieldValue(fields, 'isNft', false);
 
-        // Получаем имя владельца из истории
-        let ownerName = null;
-        if (fields.history?.arrayValue?.values?.length > 0) {
-            const lastHistory = fields.history.arrayValue.values[0];
-            const newOwner = lastHistory?.mapValue?.fields?.newOwner?.mapValue?.fields;
-            if (newOwner) {
-                const username = newOwner.username?.stringValue;
-                const firstName = newOwner.first_name?.stringValue || '';
-                const lastName = newOwner.last_name?.stringValue || '';
-                if (username) {
-                    ownerName = `${firstName} ${lastName}`.trim() || username;
+            let ownerName = null;
+            if (fields.history?.arrayValue?.values?.length > 0) {
+                const lastHistory = fields.history.arrayValue.values[0];
+                const newOwner = lastHistory?.mapValue?.fields?.newOwner?.mapValue?.fields;
+                if (newOwner) {
+                    const username = newOwner.username?.stringValue;
+                    const firstName = newOwner.first_name?.stringValue || '';
+                    const lastName = newOwner.last_name?.stringValue || '';
+                    if (username) {
+                        ownerName = `${firstName} ${lastName}`.trim() || username;
+                    }
                 }
             }
-        }
 
-        const imageUrl = url ? CapsTools.buildImageUrl(url) : null;
-        const displayOwner = ownerName || owner || 'Нет владельца';
-        const isOwnerEmpty = !owner || owner === '';
-        const statusInfo = CapsTools.getStatusInfo(status);
-        const gradeInfo = CapsTools.getGradeInfo(grade);
+            const imageUrl = url ? buildImageUrl(url) : null;
+            const displayOwner = ownerName || owner || 'Нет владельца';
+            const isOwnerEmpty = !owner || owner === '';
+            const statusInfo = getStatusInfo(status);
+            const gradeInfo = getGradeInfo(grade);
 
-        return `
-            <div class="chip-card">
-                <div class="chip-image-wrapper">
-                    ${imageUrl ? `<img src="${imageUrl}" alt="Chip #${id}" loading="lazy" onerror="this.style.display='none'">` : '<i class="bi bi-image" style="font-size: 3rem; opacity: 0.3; color: #94a3b8;"></i>'}
-                    <div class="chip-status-icon" style="border-color: ${statusInfo.color}50;">
-                        ${statusInfo.emoji}
-                    </div>
-                    <div class="chip-grade-badge" style="background: ${gradeInfo.color}cc;">
-                        ${gradeInfo.label}
-                    </div>
-                </div>
-                <div class="chip-info">
-                    <div class="chip-collection">
-                        <i class="bi bi-folder"></i> ${CapsTools.escapeHtml(collection)}
-                        ${isNft ? ' <span class="badge bg-info" style="font-size: 0.5rem;"><i class="bi bi-link-45deg"></i> NFT</span>' : ''}
-                    </div>
-                    <div class="d-flex align-items-center gap-1 mb-1">
-                        <i class="bi bi-person" style="font-size: 0.6rem; color: #94a3b8;"></i>
-                        <span class="chip-owner" title="${CapsTools.escapeHtml(displayOwner)}">
-                            ${isOwnerEmpty ? '—' : CapsTools.escapeHtml(displayOwner)}
-                        </span>
-                    </div>
-                    <div class="d-flex justify-content-between align-items-center">
-                        <span class="chip-status-label">
-                            <span style="color: ${statusInfo.color};">●</span> ${statusInfo.label}
-                        </span>
-                        <span class="chip-id">
-                            <i class="bi bi-hash"></i> ${CapsTools.escapeHtml(id)}
-                        </span>
-                    </div>
-                </div>
-            </div>
-        `;
-    }
-
-    function renderCaps(caps, searchNumber) {
-        if (!caps || caps.length === 0) {
             return `
-                <div class="result-card">
-                    <div class="result-body empty-state">
-                        <i class="bi bi-inbox"></i>
-                        <h4>Ничего не найдено</h4>
-                        <p class="text-muted">Фишек с номером <strong>#${CapsTools.escapeHtml(searchNumber)}</strong> не обнаружено</p>
+                <div class="chip-card">
+                    <div class="chip-image-wrapper">
+                        ${imageUrl ? `<img src="${imageUrl}" alt="Chip #${id}" loading="lazy" onerror="this.style.display='none'">` : '<i class="bi bi-image" style="font-size: 3rem; opacity: 0.3; color: #94a3b8;"></i>'}
+                        <div class="chip-status-icon" style="border-color: ${statusInfo.color}50;">
+                            ${statusInfo.emoji}
+                        </div>
+                        <div class="chip-grade-badge" style="background: ${gradeInfo.color}cc;">
+                            ${gradeInfo.label}
+                        </div>
+                    </div>
+                    <div class="chip-info">
+                        <div class="chip-collection">
+                            <i class="bi bi-folder"></i> ${escapeHtml(collection)}
+                            ${isNft ? ' <span class="badge bg-info" style="font-size: 0.5rem;"><i class="bi bi-link-45deg"></i> NFT</span>' : ''}
+                        </div>
+                        <div class="d-flex align-items-center gap-1 mb-1">
+                            <i class="bi bi-person" style="font-size: 0.6rem; color: #94a3b8;"></i>
+                            <span class="chip-owner" title="${escapeHtml(displayOwner)}">
+                                ${isOwnerEmpty ? '—' : escapeHtml(displayOwner)}
+                            </span>
+                        </div>
+                        <div class="d-flex justify-content-between align-items-center">
+                            <span class="chip-status-label">
+                                <span style="color: ${statusInfo.color};">●</span> ${statusInfo.label}
+                            </span>
+                            <span class="chip-id">
+                                <i class="bi bi-hash"></i> ${escapeHtml(id)}
+                            </span>
+                        </div>
                     </div>
                 </div>
             `;
         }
 
-        // Группируем по статусу
-        const grouped = {};
-        caps.forEach(item => {
-            const fields = item.document?.fields || {};
-            const status = CapsTools.getFieldValue(fields, 'status', 'UNKNOWN');
-            if (!grouped[status]) grouped[status] = [];
-            grouped[status].push(item);
-        });
-
-        // Порядок статусов
-        const statusOrder = ['SALE', 'READY', 'STAKED', 'WITHDRAWN', 'LOCKED', 'BANNED', 'NFT_EDITING', 'BURNED'];
-        const sortedStatuses = Object.keys(grouped).sort((a, b) => {
-            const indexA = statusOrder.indexOf(a);
-            const indexB = statusOrder.indexOf(b);
-            if (indexA === -1 && indexB === -1) return a.localeCompare(b);
-            if (indexA === -1) return 1;
-            if (indexB === -1) return -1;
-            return indexA - indexB;
-        });
-
-        let html = `
-            <div class="result-card">
-                <div class="result-header">
-                    <div>
-                        <h4 class="mb-0 fw-bold"><i class="bi bi-tag"></i> Фишки #${CapsTools.escapeHtml(searchNumber)}</h4>
+        function renderCaps(caps, searchNumber) {
+            if (!caps || caps.length === 0) {
+                return `
+                    <div class="result-card">
+                        <div class="result-body empty-state">
+                            <i class="bi bi-inbox"></i>
+                            <h4>Ничего не найдено</h4>
+                            <p class="text-muted">Фишек с номером <strong>#${escapeHtml(searchNumber)}</strong> не обнаружено</p>
+                        </div>
                     </div>
-                    <div class="d-flex flex-wrap gap-2">
-                        <span class="stat-badge"><i class="bi bi-database"></i> Всего: ${caps.length}</span>
-                        ${sortedStatuses.map(s => {
-                            const count = grouped[s].length;
-                            const info = CapsTools.getStatusInfo(s);
-                            return `<span class="stat-badge">${info.emoji} ${info.label}: ${count}</span>`;
-                        }).join('')}
-                    </div>
-                </div>
-                <div class="result-body">
-        `;
-
-        sortedStatuses.forEach(status => {
-            const items = grouped[status];
-            const info = CapsTools.getStatusInfo(status);
-
-            html += `
-                <div class="status-group">
-                    <div class="status-group-header">
-                        <span class="status-emoji">${info.emoji}</span>
-                        <span class="section-title" style="border-left-color: ${info.color}; margin-bottom: 0;">
-                            ${info.label}
-                            <span class="badge bg-secondary rounded-pill">${items.length}</span>
-                        </span>
-                    </div>
-                    <div class="chip-grid">
-                        ${items.map(item => renderChipCard(item)).join('')}
-                    </div>
-                </div>
-            `;
-        });
-
-        html += `
-                </div>
-            </div>
-        `;
-
-        return html;
-    }
-
-    async function searchCaps(number) {
-        const loadingDiv = document.getElementById('loadingSkeleton');
-        const contentDiv = document.getElementById('cardsContent');
-        loadingDiv.style.display = 'block';
-        contentDiv.innerHTML = '';
-
-        const query = {
-            structuredQuery: {
-                from: [{ collectionId: "Caps" }],
-                where: {
-                    fieldFilter: {
-                        field: { fieldPath: "number" },
-                        op: "EQUAL",
-                        value: { integerValue: String(number) }
-                    }
-                },
-                limit: 200
+                `;
             }
-        };
 
-        try {
-            const response = await fetch(FIRESTORE_URL, {
-                method: 'POST',
-                headers: {
-                    'Content-Type': 'application/json',
-                },
-                body: JSON.stringify(query)
+            const grouped = {};
+            caps.forEach(item => {
+                const fields = item.document?.fields || {};
+                const status = getFieldValue(fields, 'status', 'UNKNOWN');
+                if (!grouped[status]) grouped[status] = [];
+                grouped[status].push(item);
             });
 
-            if (!response.ok) {
-                throw new Error(`Ошибка API: ${response.status} ${response.statusText}`);
-            }
+            const statusOrder = ['SALE', 'READY', 'STAKED', 'WITHDRAWN', 'LOCKED', 'BANNED', 'NFT_EDITING', 'BURNED'];
+            const sortedStatuses = Object.keys(grouped).sort((a, b) => {
+                const indexA = statusOrder.indexOf(a);
+                const indexB = statusOrder.indexOf(b);
+                if (indexA === -1 && indexB === -1) return a.localeCompare(b);
+                if (indexA === -1) return 1;
+                if (indexB === -1) return -1;
+                return indexA - indexB;
+            });
 
-            const data = await response.json();
+            let html = `
+                <div class="result-card">
+                    <div class="result-header">
+                        <div>
+                            <h4 class="mb-0 fw-bold"><i class="bi bi-tag"></i> Фишки #${escapeHtml(searchNumber)}</h4>
+                        </div>
+                        <div class="d-flex flex-wrap gap-2">
+                            <span class="stat-badge"><i class="bi bi-database"></i> Всего: ${caps.length}</span>
+                            ${sortedStatuses.map(s => {
+                                const count = grouped[s].length;
+                                const info = getStatusInfo(s);
+                                return `<span class="stat-badge">${info.emoji} ${info.label}: ${count}</span>`;
+                            }).join('')}
+                        </div>
+                    </div>
+                    <div class="result-body">
+            `;
 
-            if (!Array.isArray(data)) {
-                throw new Error('Неверный формат ответа от сервера');
-            }
+            sortedStatuses.forEach(status => {
+                const items = grouped[status];
+                const info = getStatusInfo(status);
 
-            const rendered = renderCaps(data, number);
-            contentDiv.innerHTML = rendered;
+                html += `
+                    <div class="status-group">
+                        <div class="status-group-header">
+                            <span class="status-emoji">${info.emoji}</span>
+                            <span class="section-title" style="border-left-color: ${info.color}; margin-bottom: 0;">
+                                ${info.label}
+                                <span class="badge bg-secondary rounded-pill">${items.length}</span>
+                            </span>
+                        </div>
+                        <div class="chip-grid">
+                            ${items.map(item => renderChipCard(item)).join('')}
+                        </div>
+                    </div>
+                `;
+            });
 
-        } catch (err) {
-            contentDiv.innerHTML = `
-                <div class="alert alert-danger shadow rounded-4 border-0">
-                    <i class="bi bi-exclamation-triangle-fill me-2"></i>
-                    <strong>Ошибка:</strong> ${CapsTools.escapeHtml(err.message)}<br>
-                    <small>Проверьте номер, интернет, или возможно требуется CORS</small>
+            html += `
+                    </div>
                 </div>
             `;
-        } finally {
-            loadingDiv.style.display = 'none';
+            return html;
         }
-    }
 
-    // Обработчики
-    document.getElementById('searchBtn').addEventListener('click', () => {
-        const number = document.getElementById('capNumberInput').value.trim();
-        if (!number || isNaN(number) || parseInt(number) <= 0) {
-            alert('Введите корректный номер фишки (положительное число)');
-            return;
+        async function searchCaps(number) {
+            const loadingDiv = document.getElementById('loadingSkeleton');
+            const contentDiv = document.getElementById('cardsContent');
+            loadingDiv.style.display = 'block';
+            contentDiv.innerHTML = '';
+
+            try {
+                const data = await searchCapsByNumber(number);
+                const rendered = renderCaps(data, number);
+                contentDiv.innerHTML = rendered;
+            } catch (err) {
+                contentDiv.innerHTML = `
+                    <div class="alert alert-danger shadow rounded-4 border-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Ошибка:</strong> ${escapeHtml(err.message)}<br>
+                        <small>Проверьте номер, интернет, или возможно требуется CORS</small>
+                    </div>
+                `;
+            } finally {
+                loadingDiv.style.display = 'none';
+            }
         }
-        searchCaps(parseInt(number));
-    });
 
-    document.getElementById('capNumberInput').addEventListener('keypress', (e) => {
-        if (e.key === 'Enter') {
-            document.getElementById('searchBtn').click();
-        }
-    });
+        document.getElementById('searchBtn').addEventListener('click', () => {
+            const number = document.getElementById('capNumberInput').value.trim();
+            if (!number || isNaN(number) || parseInt(number) <= 0) {
+                alert('Введите корректный номер фишки (положительное число)');
+                return;
+            }
+            searchCaps(parseInt(number));
+        });
 
-    // Загружаем по умолчанию
-    window.addEventListener('DOMContentLoaded', () => {
-        searchCaps(2755);
-    });
+        document.getElementById('capNumberInput').addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                document.getElementById('searchBtn').click();
+            }
+        });
+
+        window.addEventListener('DOMContentLoaded', () => {
+            searchCaps(2755);
+        });
+    })();
 </script>
 </body>
 </html>

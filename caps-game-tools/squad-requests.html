@@ -1,0 +1,307 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, user-scalable=yes">
+    <title>Caps Squad Requests — Заявки во двор</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0-alpha1/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <link rel="stylesheet" href="css/common.css">
+    <style>
+        #squadIdInputWrapper { display: none; }
+    </style>
+</head>
+<body>
+<div class="app-container">
+    <div class="site-header">
+        <h1><i class="bi bi-people-fill"></i> Squad Requests</h1>
+        <div class="site-nav">
+            <a href="index.html" class="nav-link-custom"><i class="bi bi-house"></i> Портал</a>
+            <a href="market.html" class="nav-link-custom"><i class="bi bi-graph-up"></i> Аналитика</a>
+            <a href="collections.html" class="nav-link-custom"><i class="bi bi-images"></i> Галерея</a>
+            <a href="recruiter.html" class="nav-link-custom"><i class="bi bi-person-badge"></i> Рекрутер</a>
+            <a href="finder.html" class="nav-link-custom"><i class="bi bi-search"></i> Финдер</a>
+            <a href="squad-requests.html" class="nav-link-custom active"><i class="bi bi-door-open"></i> Заявки</a>
+        </div>
+    </div>
+
+    <!-- Шапка двора -->
+    <div class="squad-header" id="squadHeader">
+        <div class="squad-avatar" id="squadAvatar">
+            <i class="bi bi-shield-fill-check fs-1 text-white-50"></i>
+        </div>
+        <div>
+            <div class="squad-title" id="squadName">Загрузка...</div>
+        </div>
+    </div>
+
+    <div id="squadIdInputWrapper">
+        <input type="text" id="squadIdInput" value="-1002917473074">
+    </div>
+
+    <!-- Фильтры -->
+    <div class="row mb-3">
+        <div class="col-12">
+            <div class="filter-bar">
+                <button class="btn-outline-filter active" data-filter="all">Все (<span id="countAll">0</span>)</button>
+                <button class="btn-outline-filter" data-filter="PENDING">⏳ PENDING (<span id="countPending">0</span>)</button>
+                <button class="btn-outline-filter" data-filter="ACCEPTED">✅ ACCEPTED (<span id="countAccepted">0</span>)</button>
+                <button class="btn-outline-filter" data-filter="REJECTED">❌ REJECTED (<span id="countRejected">0</span>)</button>
+                <span class="ms-auto text-muted small" id="lastUpdated"></span>
+                <button id="refreshBtn" class="btn btn-sm btn-outline-gold"><i class="bi bi-arrow-repeat"></i></button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Список заявок -->
+    <div class="row">
+        <div class="col-12">
+            <div id="requestsContainer">
+                <div id="loadingSkeleton" style="display: none;">
+                    <div class="request-card mb-3">
+                        <div class="card-body">
+                            <div class="d-flex gap-3">
+                                <div class="avatar-mini skeleton"></div>
+                                <div style="flex:1;">
+                                    <div class="skeleton-line" style="width:40%;"></div>
+                                    <div class="skeleton-line" style="width:60%;"></div>
+                                    <div class="skeleton-line" style="width:30%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="request-card mb-3">
+                        <div class="card-body">
+                            <div class="d-flex gap-3">
+                                <div class="avatar-mini skeleton"></div>
+                                <div style="flex:1;">
+                                    <div class="skeleton-line" style="width:40%;"></div>
+                                    <div class="skeleton-line" style="width:60%;"></div>
+                                    <div class="skeleton-line" style="width:30%;"></div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                <div id="requestsList"></div>
+            </div>
+        </div>
+    </div>
+
+    <footer class="site-footer">
+        <i class="bi bi-cloud-check"></i> Данные из Firestore · CapsGame
+    </footer>
+</div>
+
+<script src="js/common.js"></script>
+<script>
+    (function() {
+        const {
+            CONFIG, getFieldValue, escapeHtml, buildImageUrl, formatTime,
+            fetchSquadInfo, fetchAllRequests, fetchPlayerProfile
+        } = window.CapsTools;
+
+        let allRequests = [];
+        let currentFilter = 'all';
+
+        function getStatusBadge(status) {
+            const map = {
+                'PENDING': '<span class="pending-badge"><i class="bi bi-clock-history"></i> PENDING</span>',
+                'ACCEPTED': '<span class="accepted-badge"><i class="bi bi-check-circle-fill"></i> ACCEPTED</span>',
+                'REJECTED': '<span class="rejected-badge"><i class="bi bi-x-circle-fill"></i> REJECTED</span>'
+            };
+            return map[status] || `<span class="badge bg-secondary">${escapeHtml(status)}</span>`;
+        }
+
+        function renderRequests(requests, filter = 'all') {
+            const container = document.getElementById('requestsList');
+            const filtered = filter === 'all' ? requests : requests.filter(r => r.status === filter);
+
+            if (filtered.length === 0) {
+                container.innerHTML = `
+                    <div class="empty-state">
+                        <i class="bi bi-inbox"></i>
+                        <h5 class="mt-3">Нет заявок</h5>
+                        <p class="text-muted">По текущему фильтру заявок не найдено</p>
+                    </div>
+                `;
+                return;
+            }
+
+            const sorted = [...filtered].sort((a, b) => {
+                if (a.status === 'PENDING' && b.status !== 'PENDING') return -1;
+                if (a.status !== 'PENDING' && b.status === 'PENDING') return 1;
+                return (a.createdAt || '').localeCompare(b.createdAt || '');
+            });
+
+            let html = '';
+            for (const req of sorted) {
+                const statusBadge = getStatusBadge(req.status);
+                const dateStr = formatTime(req.createdAt);
+                const userId = req.userId || req.id;
+
+                html += `
+                    <div class="request-card mb-3 fade-in" data-status="${req.status}" data-userid="${userId}">
+                        <div class="card-body">
+                            <div class="d-flex align-items-center gap-3 flex-wrap">
+                                <div class="avatar-mini" id="avatar-${userId}">
+                                    <i class="bi bi-person-circle fs-3 text-white-50"></i>
+                                </div>
+                                <div style="flex:1; min-width:150px;">
+                                    <div class="d-flex align-items-center gap-2 flex-wrap">
+                                        <strong id="username-${userId}" class="fs-6">Загрузка...</strong>
+                                        ${statusBadge}
+                                    </div>
+                                    <div class="d-flex gap-3 flex-wrap mt-1">
+                                        <span class="request-meta"><i class="bi bi-person"></i> ID: <code>${escapeHtml(userId)}</code></span>
+                                        <span class="request-meta"><i class="bi bi-calendar3"></i> ${dateStr}</span>
+                                        <span class="request-meta small-meta"><i class="bi bi-hash"></i> ${escapeHtml(req.id)}</span>
+                                    </div>
+                                </div>
+                                <div class="d-flex gap-2">
+                                    <a href="recruiter.html?tg=${userId}" target="_blank" class="btn btn-sm btn-outline-gold">
+                                        <i class="bi bi-person-badge"></i> Профиль
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+            }
+
+            container.innerHTML = html;
+
+            for (const req of sorted) {
+                const userId = req.userId || req.id;
+                loadUserData(userId);
+            }
+        }
+
+        async function loadUserData(userId) {
+            const usernameEl = document.getElementById(`username-${userId}`);
+            const avatarEl = document.getElementById(`avatar-${userId}`);
+            if (!usernameEl) return;
+
+            try {
+                const data = await fetchPlayerProfile(userId);
+                if (data && data.fields) {
+                    const fields = data.fields;
+                    const firstName = getFieldValue(fields, 'first_name', '');
+                    const lastName = getFieldValue(fields, 'last_name', '');
+                    const username = getFieldValue(fields, 'username', '');
+                    const fullName = `${firstName} ${lastName}`.trim() || username || `ID ${userId}`;
+                    usernameEl.textContent = fullName;
+
+                    const profile = fields.profile?.mapValue?.fields || {};
+                    const avatarPath = profile.avatar?.mapValue?.fields?.url?.stringValue || null;
+                    if (avatarPath && avatarEl) {
+                        const img = document.createElement('img');
+                        img.src = buildImageUrl(avatarPath);
+                        img.alt = 'avatar';
+                        img.onerror = () => { avatarEl.innerHTML = `<i class="bi bi-person-circle fs-3 text-white-50"></i>`; };
+                        avatarEl.innerHTML = '';
+                        avatarEl.appendChild(img);
+                    }
+                } else {
+                    usernameEl.textContent = `Пользователь ${userId}`;
+                }
+            } catch {
+                usernameEl.textContent = `Пользователь ${userId}`;
+            }
+        }
+
+        function updateCounts(requests) {
+            const total = requests.length;
+            const pending = requests.filter(r => r.status === 'PENDING').length;
+            const accepted = requests.filter(r => r.status === 'ACCEPTED').length;
+            const rejected = requests.filter(r => r.status === 'REJECTED').length;
+
+            document.getElementById('countAll').textContent = total;
+            document.getElementById('countPending').textContent = pending;
+            document.getElementById('countAccepted').textContent = accepted;
+            document.getElementById('countRejected').textContent = rejected;
+        }
+
+        async function loadAll() {
+            const squadId = CONFIG.SQUAD_ID;
+            const loadingEl = document.getElementById('loadingSkeleton');
+            const listEl = document.getElementById('requestsList');
+
+            loadingEl.style.display = 'block';
+            listEl.innerHTML = '';
+            allRequests = [];
+
+            try {
+                const squadData = await fetchSquadInfo(squadId);
+                if (squadData && squadData.fields) {
+                    const fields = squadData.fields;
+                    const title = getFieldValue(fields, 'title', 'Без названия');
+                    document.getElementById('squadName').textContent = title;
+
+                    const smallPhoto = getFieldValue(fields, 'smallPhoto', null);
+                    const bigPhoto = getFieldValue(fields, 'bigPhoto', null);
+                    const photoUrl = smallPhoto || bigPhoto;
+                    const avatarContainer = document.getElementById('squadAvatar');
+                    if (photoUrl) {
+                        const img = document.createElement('img');
+                        img.src = photoUrl;
+                        img.alt = 'squad avatar';
+                        img.onerror = () => { avatarContainer.innerHTML = `<i class="bi bi-shield-fill-check fs-1 text-white-50"></i>`; };
+                        avatarContainer.innerHTML = '';
+                        avatarContainer.appendChild(img);
+                    }
+                } else {
+                    document.getElementById('squadName').textContent = `Двор ${squadId}`;
+                }
+
+                const requests = await fetchAllRequests(squadId);
+                allRequests = requests;
+
+                updateCounts(requests);
+                renderRequests(requests, currentFilter);
+                document.getElementById('lastUpdated').textContent = `Обновлено: ${new Date().toLocaleTimeString()}`;
+
+            } catch (err) {
+                listEl.innerHTML = `
+                    <div class="alert alert-danger rounded-4 border-0">
+                        <i class="bi bi-exclamation-triangle-fill me-2"></i>
+                        <strong>Ошибка загрузки:</strong> ${escapeHtml(err.message)}
+                        <br><small>Проверьте подключение к интернету или доступность Firestore</small>
+                    </div>
+                `;
+                document.getElementById('squadName').textContent = 'Ошибка загрузки';
+            } finally {
+                loadingEl.style.display = 'none';
+            }
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            loadAll();
+
+            document.getElementById('refreshBtn').addEventListener('click', loadAll);
+
+            document.querySelectorAll('[data-filter]').forEach(btn => {
+                btn.addEventListener('click', function() {
+                    document.querySelectorAll('[data-filter]').forEach(b => b.classList.remove('active'));
+                    this.classList.add('active');
+                    currentFilter = this.dataset.filter;
+                    renderRequests(allRequests, currentFilter);
+                });
+            });
+        });
+
+        // Поддержка параметра ?squad= в URL
+        window.addEventListener('DOMContentLoaded', function() {
+            const params = new URLSearchParams(window.location.search);
+            const squadParam = params.get('squad');
+            if (squadParam) {
+                CONFIG.SQUAD_ID = squadParam;
+                document.getElementById('squadIdInputWrapper').style.display = 'block';
+                document.getElementById('squadIdInput').value = squadParam;
+                setTimeout(loadAll, 100);
+            }
+        });
+    })();
+</script>
+</body>
+</html>
