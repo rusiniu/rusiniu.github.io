@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>Кварто-квинтовый круг</title>
+<meta name="theme-color" content="#1a1a2e">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="Кварто-квинтовый круг">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root {
+    --bg: #1a1a2e;
+    --circle-bg: #16213e;
+    --line: #2a3a5c;
+    --key-bg: #0f3460;
+    --key-text: #e0e0e0;
+    --active: #e94560;
+    --frame: #f5b700;
+    --text: #e0e0e0;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; }
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: system-ui, -apple-system, sans-serif;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: flex-start;
+    min-height: 100dvh;
+    padding: 16px;
+    user-select: none;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  h1 { font-size: 1.1rem; font-weight: 400; opacity: 0.7; margin-bottom: 8px; text-align: center; }
+  .circle-wrap {
+    position: relative;
+    width: min(92vw, 92dvh, 560px);
+    height: min(92vw, 92dvh, 560px);
+    flex-shrink: 0;
+  }
+  .ring {
+    position: absolute;
+    inset: 0;
+    border-radius: 50%;
+    background: var(--circle-bg);
+    border: 1px solid var(--line);
+    transition: transform 0.5s cubic-bezier(.4,2,.6,1);
+    z-index: 1;
+  }
+  .frame {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 2;
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  .frame.show { opacity: 1; }
+  .key {
+    position: absolute;
+    width: 52px;
+    height: 52px;
+    margin: -26px 0 0 -26px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.9rem;
+    font-weight: 600;
+    cursor: pointer;
+    background: var(--key-bg);
+    color: var(--key-text);
+    border: 2px solid transparent;
+    left: 50%;
+    top: 50%;
+    transition: transform 0.5s cubic-bezier(.4,2,.6,1), background .25s, border-color .25s;
+  }
+  .key.minor { font-size: 0.75rem; opacity: 0.85; }
+  .key:hover { border-color: #4a6fa5; }
+  .key.active {
+    background: var(--active);
+    color: #fff;
+    box-shadow: 0 0 20px var(--active);
+  }
+  .pointer {
+    position: absolute;
+    left: 50%;
+    top: 0;
+    transform: translateX(-50%);
+    width: 0; height: 0;
+    border-left: 10px solid transparent;
+    border-right: 10px solid transparent;
+    border-top: 16px solid var(--active);
+    z-index: 3;
+    filter: drop-shadow(0 0 6px var(--active));
+    opacity: 0;
+    transition: opacity .3s;
+  }
+  .pointer.show { opacity: 1; }
+  .info {
+    margin-top: 22px;
+    text-align: center;
+    min-height: 70px;
+  }
+  .info .chord {
+    font-size: 1.8rem;
+    font-weight: 700;
+    color: var(--active);
+  }
+  .info .degrees {
+    margin-top: 8px;
+    font-size: 0.85rem;
+    letter-spacing: 1px;
+  }
+  .info .degrees span {
+    display: inline-block;
+    margin: 3px 4px;
+    padding: 2px 9px;
+    border-radius: 4px;
+    background: rgba(245,183,0,0.12);
+    border: 1px solid var(--frame);
+    color: var(--frame);
+    font-weight: 600;
+  }
+  .hint { font-size: 0.75rem; opacity: 0.4; margin-top: 12px; text-align: center; max-width: 90%; }
+
+  @media (max-height: 520px) {
+    h1, .hint { display: none; }
+    .circle-wrap { width: min(90vh, 90vw); height: min(90vh, 90vw); }
+    .info { margin-top: 8px; min-height: auto; }
+  }
+</style>
+</head>
+<body>
+
+<h1>Кварто-квинтовый круг</h1>
+
+<div class="circle-wrap">
+  <div class="ring" id="ring"></div>
+  <canvas class="frame" id="frame" width="560" height="560"></canvas>
+  <div class="pointer" id="pointer"></div>
+</div>
+
+<div class="info" id="info">
+  <div class="chord">—</div>
+  <div class="degrees">Нажми на аккорд</div>
+</div>
+
+<div class="hint">рамка статична — выделяет 3 мажорных сверху и их параллельные миноры под ними</div>
+
+<script>
+const MAJOR = ["C","G","D","A","E","B","F#","C#","G#","D#","A#","F"];
+const MINOR = ["Am","Em","Bm","F#m","C#m","G#m","D#m","A#m","Fm","Cm","Gm","Dm"];
+const N = 12;
+
+// --- Мажорная тональность: порядок I, IV, V, ii, iii, vi ---
+const MAJOR_DEGREES = [
+  { step: 0,  type: "major", degree: "I",   order: 1 },
+  { step: -1, type: "major", degree: "IV",  order: 2 },
+  { step: 1,  type: "major", degree: "V",   order: 3 },
+  { step: 1,  type: "minor", degree: "ii",  order: 4 },
+  { step: 0,  type: "minor", degree: "vi",  order: 6 },
+  { step: -1, type: "minor", degree: "iii", order: 5 },
+];
+
+// --- Минорная тональность: порядок i, iv, v, VI, VII, III ---
+const MINOR_DEGREES = [
+  { step: 0,  type: "minor", degree: "i",   order: 1 },
+  { step: -1, type: "minor", degree: "iv",  order: 2 },
+  { step: 1,  type: "minor", degree: "v",   order: 3 },
+  { step: -1, type: "major", degree: "VI",  order: 4 },
+  { step: 1,  type: "major", degree: "VII", order: 5 },
+  { step: 0,  type: "major", degree: "III", order: 6 },
+];
+
+const ring    = document.getElementById("ring");
+const frame   = document.getElementById("frame");
+const fctx    = frame.getContext("2d");
+const info    = document.getElementById("info");
+const pointer = document.getElementById("pointer");
+
+let rotation = 0;
+const keyEls = [];
+
+for (let i = 0; i < N; i++) {
+  keyEls.push(makeKey(i, "major", MAJOR[i]));
+  keyEls.push(makeKey(i, "minor", MINOR[i]));
+}
+keyEls.forEach(el => ring.appendChild(el));
+
+function makeKey(index, type, label) {
+  const el = document.createElement("button");
+  el.className = "key" + (type === "minor" ? " minor" : "");
+  el.textContent = label;
+  el.dataset.index = index;
+  el.dataset.type = type;
+  el.addEventListener("click", () => select(index, type, el));
+  return el;
+}
+
+function positionKeys() {
+  const size = ring.clientWidth;
+  frame.width  = size;
+  frame.height = size;
+  const rOuter = size * 0.40;
+  const rInner = size * 0.40 * 0.60;
+
+  keyEls.forEach((el) => {
+    const i = +el.dataset.index;
+    const isMinor = el.dataset.type === "minor";
+    const angle = (i / N) * Math.PI * 2 - Math.PI / 2;
+    const r = isMinor ? rInner : rOuter;
+    const x = Math.cos(angle) * r;
+    const y = Math.sin(angle) * r;
+    el.style.left = `calc(50% + ${x}px)`;
+    el.style.top  = `calc(50% + ${y}px)`;
+    el.style.transform = `rotate(${-rotation}deg)`;
+  });
+
+  drawFrame();
+}
+
+function drawFrame() {
+  const size = frame.width;
+  const cx = size / 2, cy = size / 2;
+  const rOuter = size * 0.40 + 36;
+  const rInner = size * 0.40 * 0.60 - 36;
+  const step = (Math.PI * 2) / N;
+  const startBase = -Math.PI / 2;
+
+  fctx.clearRect(0, 0, size, size);
+
+  const fromA = startBase - step * 1.5;
+  const toA   = startBase + step * 1.5;
+
+  // внешняя дуга (мажорные)
+  fctx.beginPath();
+  fctx.arc(cx, cy, rOuter, fromA, toA, false);
+  fctx.arc(cx, cy, rInner, toA, fromA, true);
+  fctx.closePath();
+  fctx.fillStyle = "rgba(245,183,0,0.10)";
+  fctx.fill();
+  fctx.strokeStyle = "#f5b700";
+  fctx.lineWidth = 2.5;
+  fctx.shadowColor = "#f5b700";
+  fctx.shadowBlur = 10;
+  fctx.stroke();
+  fctx.shadowBlur = 0;
+
+  fctx.beginPath();
+  for (let k = -1; k <= 2; k++) {
+    const a = startBase + (k - 0.5) * step;
+    fctx.moveTo(cx + Math.cos(a) * rInner, cy + Math.sin(a) * rInner);
+    fctx.lineTo(cx + Math.cos(a) * rOuter, cy + Math.sin(a) * rOuter);
+  }
+  fctx.strokeStyle = "rgba(245,183,0,0.55)";
+  fctx.lineWidth = 1;
+  fctx.stroke();
+
+  // внутренняя дуга (минорные)
+  const rOuterM = size * 0.40 * 0.60 + 30;
+  const rInnerM = size * 0.40 * 0.60 - 30;
+
+  fctx.beginPath();
+  fctx.arc(cx, cy, rOuterM, fromA, toA, false);
+  fctx.arc(cx, cy, rInnerM, toA, fromA, true);
+  fctx.closePath();
+  fctx.fillStyle = "rgba(245,183,0,0.10)";
+  fctx.fill();
+  fctx.strokeStyle = "#f5b700";
+  fctx.lineWidth = 2.5;
+  fctx.shadowColor = "#f5b700";
+  fctx.shadowBlur = 10;
+  fctx.stroke();
+  fctx.shadowBlur = 0;
+
+  fctx.beginPath();
+  for (let k = -1; k <= 2; k++) {
+    const a = startBase + (k - 0.5) * step;
+    fctx.moveTo(cx + Math.cos(a) * rInnerM, cy + Math.sin(a) * rInnerM);
+    fctx.lineTo(cx + Math.cos(a) * rOuterM, cy + Math.sin(a) * rOuterM);
+  }
+  fctx.strokeStyle = "rgba(245,183,0,0.55)";
+  fctx.lineWidth = 1;
+  fctx.stroke();
+
+  frame.classList.add("show");
+}
+
+function select(index, type, el) {
+  keyEls.forEach(k => k.classList.remove("active"));
+  el.classList.add("active");
+
+  const target = -(index / N) * 360;
+  const curMod = ((rotation % 360) + 360) % 360;
+  const tgtMod = ((target  % 360) + 360) % 360;
+  let delta = tgtMod - curMod;
+  if (delta >  180) delta -= 360;
+  if (delta < -180) delta += 360;
+  rotation += delta;
+
+  ring.style.transform = `rotate(${rotation}deg)`;
+  keyEls.forEach(k => k.style.transform = `rotate(${-rotation}deg)`);
+
+  const isMinor = type === "minor";
+  const base = index;
+  const source = isMinor ? MINOR_DEGREES : MAJOR_DEGREES;
+
+  const items = source.map(d => {
+    const idx = (base + d.step + N) % N;
+    const chord = d.type === "minor" ? MINOR[idx] : MAJOR[idx];
+    return { ...d, chord };
+  });
+  items.sort((a, b) => a.order - b.order);
+
+  const chordName = isMinor ? MINOR[index] : MAJOR[index];
+  info.innerHTML = `
+    <div class="chord">${chordName}</div>
+    <div class="degrees">
+      ${items.map(f => `<span>${f.degree} · ${f.chord}</span>`).join("")}
+    </div>
+  `;
+
+  pointer.classList.add("show");
+}
+
+window.addEventListener("resize", positionKeys);
+window.addEventListener("load", positionKeys);
+setTimeout(positionKeys, 50);
+
+if ("serviceWorker" in navigator) {
+  window.addEventListener("load", () => {
+    navigator.serviceWorker.register("./sw.js").catch(console.warn);
+  });
+}
+</script>
+</body>
+</html>

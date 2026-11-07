@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" width="512" height="512">
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="45%" r="60%">
+      <stop offset="0%" stop-color="#1f2a4a"/>
+      <stop offset="100%" stop-color="#0f1729"/>
+    </radialGradient>
+    <filter id="glow" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="6" result="b"/>
+      <feMerge><feMergeNode in="b"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+
+  <!-- фон -->
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <circle cx="256" cy="256" r="196" fill="none" stroke="#2a3a5c" stroke-width="2"/>
+
+  <!-- 12 мажорных меток -->
+  <g fill="#4a6fa5">
+    <circle cx="256" cy="88"  r="10"/>
+    <circle cx="340" cy="111" r="10"/>
+    <circle cx="402" cy="173" r="10"/>
+    <circle cx="425" cy="256" r="10"/>
+    <circle cx="402" cy="339" r="10"/>
+    <circle cx="340" cy="401" r="10"/>
+    <circle cx="256" cy="424" r="10"/>
+    <circle cx="172" cy="401" r="10"/>
+    <circle cx="110" cy="339" r="10"/>
+    <circle cx="87"  cy="256" r="10"/>
+    <circle cx="110" cy="173" r="10"/>
+    <circle cx="172" cy="111" r="10"/>
+  </g>
+
+  <!-- 12 минорных меток -->
+  <g fill="#33507f">
+    <circle cx="256" cy="140" r="7"/>
+    <circle cx="312" cy="155" r="7"/>
+    <circle cx="357" cy="200" r="7"/>
+    <circle cx="372" cy="256" r="7"/>
+    <circle cx="357" cy="312" r="7"/>
+    <circle cx="312" cy="357" r="7"/>
+    <circle cx="256" cy="372" r="7"/>
+    <circle cx="200" cy="357" r="7"/>
+    <circle cx="155" cy="312" r="7"/>
+    <circle cx="140" cy="256" r="7"/>
+    <circle cx="155" cy="200" r="7"/>
+    <circle cx="200" cy="155" r="7"/>
+  </g>
+
+  <!-- жёлтая рамка: только 3 верхних сектора (90°), от -135° до -45° -->
+  <g filter="url(#glow)">
+    <!-- мажорная дуга (внешняя) -->
+    <path d="M 149.6 149.6 A 150.4 150.4 0 0 1 362.4 149.6"
+          fill="none" stroke="#f5b700" stroke-width="10" stroke-linecap="round"/>
+    <!-- минорная дуга (внутренняя) -->
+    <path d="M 172.3 172.3 A 118.4 118.4 0 0 1 339.7 172.3"
+          fill="none" stroke="#f5b700" stroke-width="8" stroke-linecap="round"/>
+  </g>
+
+  <!-- тоника наверху -->
+  <g filter="url(#glow)">
+    <circle cx="256" cy="88" r="18" fill="#e94560"/>
+    <circle cx="256" cy="88" r="8"  fill="#fff"/>
+  </g>
+
+  <!-- центр -->
+  <circle cx="256" cy="256" r="22" fill="#16213e" stroke="#f5b700" stroke-width="3"/>
+</svg>
