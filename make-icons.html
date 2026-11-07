@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<title>Генератор иконок — Круг квинт</title>
+<style>
+  body {
+    background: #1a1a2e; color: #e0e0e0;
+    font-family: system-ui, sans-serif;
+    max-width: 640px; margin: 40px auto; padding: 0 20px;
+  }
+  h1 { font-size: 1.3rem; font-weight: 500; }
+  p  { opacity: 0.75; font-size: 0.9rem; line-height: 1.5; }
+  .preview {
+    display: flex; gap: 20px; align-items: center;
+    flex-wrap: wrap; margin: 20px 0;
+  }
+  .preview img { border-radius: 12px; background: #0f1729; }
+  button {
+    background: #e94560; color: #fff; border: 0;
+    padding: 10px 18px; border-radius: 8px;
+    font-size: 0.95rem; font-weight: 600; cursor: pointer;
+    margin: 4px 4px 4px 0;
+    transition: background .2s;
+  }
+  button:hover { background: #ff5d78; }
+  button:disabled { opacity: 0.4; cursor: not-allowed; }
+  .status { opacity: 0.6; font-size: 0.85rem; margin-top: 10px; min-height: 1.2em; }
+  input[type=file] { display: none; }
+  label.upload {
+    display: inline-block; background: #0f3460; color: #e0e0e0;
+    padding: 10px 18px; border-radius: 8px; cursor: pointer;
+    font-size: 0.95rem; font-weight: 600;
+  }
+</style>
+</head>
+<body>
+
+<h1>Генератор иконок</h1>
+<p>
+  1) Выбери <code>icon.svg</code> из проекта.<br>
+  2) Нажми «Сгенерировать PNG». Файлы скачаются автоматически.<br>
+  Ничего не отправляется в сеть — всё считается локально.
+</p>
+
+<label class="upload">
+  <input type="file" id="file" accept=".svg,image/svg+xml">
+  Загрузить icon.svg
+</label>
+
+<div class="preview" id="preview"></div>
+
+<div>
+  <button id="btn192" disabled>Скачать icon-192.png</button>
+  <button id="btn512" disabled>Скачать icon-512.png</button>
+  <button id="btnMask" disabled>Скачать icon-maskable-512.png</button>
+  <button id="btnAll" disabled>Скачать все</button>
+</div>
+
+<div class="status" id="status">Жду файл…</div>
+
+<script>
+const fileInput = document.getElementById("file");
+const preview   = document.getElementById("preview");
+const statusEl  = document.getElementById("status");
+const btn192 = document.getElementById("btn192");
+const btn512 = document.getElementById("btn512");
+const btnMask = document.getElementById("btnMask");
+const btnAll = document.getElementById("btnAll");
+
+let iconImage = null;   // Image с загруженным SVG
+let iconBlobURL = null; // для скачивания
+let baseName = "icon";
+
+fileInput.addEventListener("change", (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  baseName = file.name.replace(/\.svg$/i, "") || "icon";
+  const url = URL.createObjectURL(file);
+  const img = new Image();
+  img.onload = () => {
+    iconImage = img;
+    if (iconBlobURL) URL.revokeObjectURL(iconBlobURL);
+    iconBlobURL = url;
+    showPreview();
+    enableButtons(true);
+    statusEl.textContent = `Загружено: ${file.name} (${img.width}×${img.height})`;
+  };
+  img.onerror = () => {
+    statusEl.textContent = "Не удалось прочитать SVG. Проверь, что это валидный SVG-файл.";
+    URL.revokeObjectURL(url);
+  };
+  img.src = url;
+});
+
+function showPreview() {
+  preview.innerHTML = "";
+  [64, 128, 192].forEach((sz) => {
+    const cv = document.createElement("canvas");
+    cv.width = cv.height = sz;
+    cv.getContext("2d").drawImage(iconImage, 0, 0, sz, sz);
+    const wrap = document.createElement("div");
+    wrap.style.textAlign = "center";
+    wrap.appendChild(cv);
+    const label = document.createElement("div");
+    label.style.fontSize = "0.75rem";
+    label.style.opacity = "0.6";
+    label.textContent = sz + "px";
+    wrap.appendChild(label);
+    preview.appendChild(wrap);
+  });
+}
+
+function enableButtons(on) {
+  [btn192, btn512, btnMask, btnAll].forEach(b => b.disabled = !on);
+}
+
+// Рисует SVG в canvas заданного размера.
+// Для maskable — уменьшаем содержимое до 80% и центрируем (safe zone).
+function renderToCanvas(size, maskable = false) {
+  const canvas = document.createElement("canvas");
+  canvas.width = size;
+  canvas.height = size;
+  const ctx = canvas.getContext("2d");
+
+  if (maskable) {
+    // фон на всю площадь (чтобы не было прозрачных углов)
+    ctx.fillStyle = "#16213e";
+    ctx.fillRect(0, 0, size, size);
+    // сам SVG — в центральные 80%
+    const inner = size * 0.8;
+    const off = (size - inner) / 2;
+    ctx.drawImage(iconImage, off, off, inner, inner);
+  } else {
+    ctx.drawImage(iconImage, 0, 0, size, size);
+  }
+  return canvas;
+}
+
+function downloadCanvas(canvas, filename) {
+  canvas.toBlob((blob) => {
+    if (!blob) return;
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = filename;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+      URL.revokeObjectURL(a.href);
+      a.remove();
+    }, 1000);
+  }, "image/png");
+}
+
+btn192.addEventListener("click", () => {
+  downloadCanvas(renderToCanvas(192), "icon-192.png");
+  statusEl.textContent = "Скачан icon-192.png";
+});
+btn512.addEventListener("click", () => {
+  downloadCanvas(renderToCanvas(512), "icon-512.png");
+  statusEl.textContent = "Скачан icon-512.png";
+});
+btnMask.addEventListener("click", () => {
+  downloadCanvas(renderToCanvas(512, true), "icon-maskable-512.png");
+  statusEl.textContent = "Скачан icon-maskable-512.png";
+});
+btnAll.addEventListener("click", () => {
+  downloadCanvas(renderToCanvas(192), "icon-192.png");
+  downloadCanvas(renderToCanvas(512), "icon-512.png");
+  downloadCanvas(renderToCanvas(512, true), "icon-maskable-512.png");
+  statusEl.textContent = "Скачаны все три иконки (может быть пауза между скачиваниями).";
+});
+</script>
+
+</body>
+</html>
